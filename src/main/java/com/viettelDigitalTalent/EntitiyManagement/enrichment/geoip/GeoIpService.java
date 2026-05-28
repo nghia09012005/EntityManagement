@@ -1,6 +1,7 @@
 package com.viettelDigitalTalent.EntitiyManagement.enrichment.geoip;
 
 import com.maxmind.geoip2.DatabaseReader;
+import com.maxmind.geoip2.model.AsnResponse;
 import com.maxmind.geoip2.model.CityResponse;
 import com.viettelDigitalTalent.EntitiyManagement.enrichment.core.EnrichmentProvider;
 import com.viettelDigitalTalent.EntitiyManagement.enrichment.dtos.GeoInfo;
@@ -19,32 +20,50 @@ import java.net.InetAddress;
 @Slf4j // Dùng Lombok để log
 public class GeoIpService {
 
-    private DatabaseReader reader;
+    private DatabaseReader cityReader;
+    private DatabaseReader asnReader;
 
     @PostConstruct
     public void init() {
-        try {
-            // Đọc file từ classpath
-            InputStream database = getClass().getClassLoader().getResourceAsStream("GeoLite2-City.mmdb");
+        cityReader = loadReader("GeoLite2-City.mmdb");
+        asnReader = loadReader("GeoLite2-ASN.mmdb");
+        log.info("GeoIP databases đã tải xong: city={}, asn={}", cityReader != null, asnReader != null);
+    }
+
+    private DatabaseReader loadReader(String resourceName) {
+        try (InputStream database = getClass().getClassLoader().getResourceAsStream(resourceName)) {
             if (database == null) {
-                throw new FileNotFoundException("Không tìm thấy file GeoLite2-City.mmdb trong resources");
+                log.warn("Không tìm thấy file {} trong resources", resourceName);
+                return null;
             }
-            reader = new DatabaseReader.Builder(database).build();
-            log.info("GeoIP Database đã tải thành công!");
+            return new DatabaseReader.Builder(database).build();
         } catch (IOException e) {
-            log.error("Lỗi khi load GeoIP database", e);
+            log.error("Lỗi khi load GeoIP database {}", resourceName, e);
+            return null;
         }
     }
 
     public GeoInfo lookup(String ipAddress) {
         try {
             InetAddress ip = InetAddress.getByName(ipAddress);
-            CityResponse response = reader.city(ip);
-
             GeoInfo info = new GeoInfo();
-            info.setCountry(response.getCountry().getName());
-            info.setCity(response.getCity().getName());
-            info.setIsoCode(response.getCountry().getIsoCode());
+
+            if (cityReader != null) {
+                CityResponse response = cityReader.city(ip);
+                info.setCountry(response.getCountry().getName());
+                info.setCity(response.getCity().getName());
+                info.setIsoCode(response.getCountry().getIsoCode());
+            }
+
+            if (asnReader != null) {
+                AsnResponse asnResponse = asnReader.asn(ip);
+                String organization = asnResponse.getAutonomousSystemOrganization();
+                Long asnNumber = asnResponse.getAutonomousSystemNumber();
+                info.setAsn(organization == null || organization.isBlank()
+                    ? "AS" + asnNumber
+                    : "AS" + asnNumber + " - " + organization);
+            }
+
             return info;
         } catch (Exception e) {
             log.warn("Không thể tra cứu IP: {}. Lỗi: {}", ipAddress, e.getMessage());
@@ -55,7 +74,8 @@ public class GeoIpService {
     @PreDestroy
     public void cleanup() {
         try {
-            if (reader != null) reader.close();
+            if (cityReader != null) cityReader.close();
+            if (asnReader != null) asnReader.close();
         } catch (IOException e) {
             log.error("Lỗi khi đóng GeoIP reader", e);
         }

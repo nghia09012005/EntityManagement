@@ -37,3 +37,6 @@ minio:
   access-key: admin
   secret-key: password123
   bucket-name: uploads
+
+virustotal:
+  api-key: 3c89ae4118ce7b88be512ab34608bcbe4f81d845ee00829dd6889186e13e92b3
