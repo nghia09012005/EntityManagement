@@ -3,6 +3,7 @@ package com.viettelDigitalTalent.EntitiyManagement.normalize.base;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.Map;
 
 @Data
@@ -17,5 +18,5 @@ public class BaseEvent {
     private boolean isEnriched;        // Flag xác nhận đã làm giàu
 
     // Metadata thô (đề phòng trường hợp log có field lạ)
-    private Map<String, Object> rawData;
+    private Map<String, Object> rawData = new HashMap<>();
 }

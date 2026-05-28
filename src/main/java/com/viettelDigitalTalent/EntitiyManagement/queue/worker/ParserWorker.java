@@ -1,5 +1,6 @@
 package com.viettelDigitalTalent.EntitiyManagement.queue.worker;
 
+import com.viettelDigitalTalent.EntitiyManagement.enrichment.core.EnrichmentService;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.base.BaseEvent;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.event.AuthenticationEvent;
 import com.viettelDigitalTalent.EntitiyManagement.parser.core.ParserDispatcher;
@@ -20,6 +21,8 @@ public class ParserWorker {
     private ParserDispatcher parserDispatcher;
 
     @Autowired private TaskExecutor taskExecutor;
+
+    @Autowired private EnrichmentService enrichService;
 
     // Lắng nghe topic 'raw-logs'
     @KafkaListener(topics = "raw-logs", groupId = "soc-parser-group")
@@ -53,8 +56,14 @@ public class ParserWorker {
     private void enrichEvent(BaseEvent event) {
         String threadName = Thread.currentThread().getName();
         log.info("[" + threadName + "] Đang enrich dữ liệu cho: " + event.getCategory());
+
+
+        AuthenticationEvent authEvent = (AuthenticationEvent)event;
+        authEvent.setIpAddress("113.161.1.1");
+        enrichService.enrichEvent(authEvent);
+
         // Giả lập xử lý
-        try { Thread.sleep(500); } catch (InterruptedException e) {}
+        // try { Thread.sleep(500); } catch (InterruptedException e) {}
         log.info("[" + threadName + "] Enrich xong!");
     }
 

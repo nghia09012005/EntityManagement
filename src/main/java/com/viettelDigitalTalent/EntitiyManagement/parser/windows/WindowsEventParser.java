@@ -36,7 +36,7 @@ public class WindowsEventParser implements EventParser {
             event.setSuccess(success);
 
             event.setTimestamp(LocalDateTime.now());
-            event.setCategory(EventCategory.AUTHENTICATION); // Gán category chuẩn
+            event.setCategory(EventCategory.AUTHENTICATION.name()); // Gán category chuẩn
 
             return event;
         } catch (Exception e) {
