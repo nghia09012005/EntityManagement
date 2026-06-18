@@ -2,6 +2,7 @@ package com.viettelDigitalTalent.EntitiyManagement.management.service;
 
 import com.viettelDigitalTalent.EntitiyManagement.management.dto.FileUploadResponse;
 import io.minio.BucketExistsArgs;
+import io.minio.GetObjectArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
@@ -11,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.InputStream;
 import java.util.UUID;
 
 @Service
@@ -63,5 +65,14 @@ public class MinioService {
         String fileUrl = minioUrl + "/" + bucketName + "/" + fileName;
 
         return new FileUploadResponse(fileName, fileUrl);
+    }
+
+    public InputStream downloadFile(String fileName) throws Exception {
+        return minioClient.getObject(
+                GetObjectArgs.builder()
+                        .bucket(bucketName)
+                        .object(fileName)
+                        .build()
+        );
     }
 }

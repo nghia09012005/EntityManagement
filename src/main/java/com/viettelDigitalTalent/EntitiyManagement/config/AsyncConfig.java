@@ -12,8 +12,9 @@ public class AsyncConfig {
     @Bean
     public TaskExecutor taskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(5); // Số thread duy trì
-        executor.setMaxPoolSize(10); // Số thread tối đa
+        int processors = Runtime.getRuntime().availableProcessors();
+        executor.setCorePoolSize(processors); // Số thread duy trì dựa trên CPU core
+        executor.setMaxPoolSize(processors * 2); // Số thread tối đa
         executor.setThreadNamePrefix("SOC-Async-");
         executor.initialize();
         return executor;

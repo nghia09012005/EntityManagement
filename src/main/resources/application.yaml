@@ -27,10 +27,19 @@ spring:
           max-idle: 8
           min-idle: 0
 
+    mongodb:
+      uri: mongodb://root:root@localhost:27017/soc_db?authSource=admin
+
   servlet:
     multipart:
       max-file-size: 100MB
       max-request-size: 100MB
+
+  neo4j:
+    uri: bolt://localhost:7687
+    authentication:
+      username: neo4j
+      password: password123
 
 minio:
   url: http://localhost:9000

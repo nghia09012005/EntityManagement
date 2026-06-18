@@ -30,8 +30,8 @@ public class WindowsEventParser implements EventParser {
             // Không sợ bị NullPointerException nếu trường không tồn tại
             event.setUsername(JsonUtils.extractValue(root, "user", "username", "accountName"));
             event.setIpAddress(JsonUtils.extractValue(root, "ip", "sourceIp", "client_ip"));
+            event.setWorkstation(JsonUtils.extractValue(root, "workstation", "hostname", "host", "computer"));
 
-            // Xử lý kiểu boolean với giá trị mặc định nếu không thấy
             boolean success = root.has("is_success") ? root.get("is_success").asBoolean() : false;
             event.setSuccess(success);
 

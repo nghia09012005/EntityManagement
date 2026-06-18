@@ -1,0 +1,2 @@
+{"processName":"powershell.exe","processPath":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","fileHash":"44d88612fea8a8f36de82e1278abb02f","commandLine":"powershell.exe -nop -enc abc"}
+{"processName":"cmd.exe","processPath":"C:\\Windows\\System32\\cmd.exe","sha256":"d41d8cd98f00b204e9800998ecf8427e","commandLine":"cmd.exe /c whoami"}

@@ -3,8 +3,10 @@ package com.viettelDigitalTalent.EntitiyManagement.enrichment.core;
 import com.viettelDigitalTalent.EntitiyManagement.enrichment.dtos.GeoInfo;
 import com.viettelDigitalTalent.EntitiyManagement.enrichment.dtos.MalwareInfo;
 import com.viettelDigitalTalent.EntitiyManagement.enrichment.geoip.GeoIpService;
+import com.viettelDigitalTalent.EntitiyManagement.normalize.alert.AlertEvent;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.base.BaseEvent;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.event.AuthenticationEvent;
+import com.viettelDigitalTalent.EntitiyManagement.normalize.event.NetworkEvent;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.event.ProcessEvent;
 import com.viettelDigitalTalent.EntitiyManagement.enrichment.threatintel.MockVirusTotalService;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +33,15 @@ public class EnrichmentService {
 
         if (event instanceof ProcessEvent processEvent) {
             enrichFileHash(processEvent);
+        }
+
+        if (event instanceof NetworkEvent networkEvent) {
+            enrichNetworkGeoIp(networkEvent);
+        }
+
+        if (event instanceof AlertEvent alertEvent) {
+            enrichAlertGeoIp(alertEvent);
+            enrichAlertFileHash(alertEvent);
         }
 
         event.setEnriched(true);
@@ -68,6 +79,38 @@ public class EnrichmentService {
             return;
         }
 
+        if (event instanceof NetworkEvent networkEvent) {
+            GeoInfo srcGeo = (GeoInfo) networkEvent.getRawData().get("srcGeo");
+            GeoInfo dstGeo = (GeoInfo) networkEvent.getRawData().get("dstGeo");
+            log.info(
+                "[Enrichment done] type=NETWORK srcIp={} srcCountry={} dstIp={} dstCountry={} dstDomain={} enriched={}",
+                networkEvent.getSrcIp(),
+                srcGeo != null ? srcGeo.getCountry() : null,
+                networkEvent.getDstIp(),
+                dstGeo != null ? dstGeo.getCountry() : null,
+                networkEvent.getDstDomain(),
+                networkEvent.isEnriched()
+            );
+            return;
+        }
+
+        if (event instanceof AlertEvent alertEvent) {
+            GeoInfo geo = (GeoInfo) alertEvent.getRawData().get("geo");
+            MalwareInfo malware = (MalwareInfo) alertEvent.getRawData().get("malware");
+            log.info(
+                "[Enrichment done] type=ALERT alertName={} severity={} targetIp={} country={} fileHash={} verdict={} malicious={} enriched={}",
+                alertEvent.getAlertName(),
+                alertEvent.getSeverity(),
+                alertEvent.getTargetIp(),
+                geo != null ? geo.getCountry() : null,
+                alertEvent.getTargetFileHash(),
+                malware != null ? malware.getVerdict() : null,
+                malware != null && malware.isMalicious(),
+                alertEvent.isEnriched()
+            );
+            return;
+        }
+
         log.info("[Enrichment done] type={} enriched={}", event.getClass().getSimpleName(), event.isEnriched());
     }
 
@@ -79,19 +122,7 @@ public class EnrichmentService {
             return;
         }
 
-        String cacheKey = "ip:" + ipAddress;
-        GeoInfo geo = (GeoInfo) redis.opsForValue().get(cacheKey);
-
-        if (geo == null) {
-            log.info("[Geo lookup start]");
-            geo = geoIpService.lookup(ipAddress);
-
-            if (geo != null) {
-                log.info("[Geo after lookup] {} {}", geo.getCountry(), geo.getCity());
-                redis.opsForValue().set(cacheKey, geo, Duration.ofDays(7));
-            }
-        }
-
+        GeoInfo geo = lookupGeoWithCache(ipAddress);
         if (geo != null) {
             event.getRawData().put("geo", geo);
         }
@@ -133,5 +164,69 @@ public class EnrichmentService {
         }
 
         event.getRawData().put("malware", malware);
+    }
+
+    private void enrichNetworkGeoIp(NetworkEvent event) {
+        if (event.getSrcIp() != null && !event.getSrcIp().isBlank()) {
+            GeoInfo srcGeo = lookupGeoWithCache(event.getSrcIp());
+            if (srcGeo != null) {
+                event.getRawData().put("srcGeo", srcGeo);
+            }
+        }
+
+        if (event.getDstIp() != null && !event.getDstIp().isBlank()) {
+            GeoInfo dstGeo = lookupGeoWithCache(event.getDstIp());
+            if (dstGeo != null) {
+                event.getRawData().put("dstGeo", dstGeo);
+            }
+        }
+    }
+
+    private void enrichAlertGeoIp(AlertEvent event) {
+        if (event.getTargetIp() == null || event.getTargetIp().isBlank()) {
+            return;
+        }
+        GeoInfo geo = lookupGeoWithCache(event.getTargetIp());
+        if (geo != null) {
+            event.getRawData().put("geo", geo);
+        }
+    }
+
+    private void enrichAlertFileHash(AlertEvent event) {
+        if (event.getTargetFileHash() == null || event.getTargetFileHash().isBlank()) {
+            return;
+        }
+        String normalizedHash = event.getTargetFileHash().trim().toLowerCase();
+        String cacheKey = "hash:" + normalizedHash;
+        MalwareInfo malware = (MalwareInfo) redis.opsForValue().get(cacheKey);
+
+        if (malware == null) {
+            if (threatIntelService != null) {
+                malware = threatIntelService.lookup(normalizedHash);
+            }
+            if (malware == null) {
+                malware = new MalwareInfo();
+                malware.setProvider("none");
+                malware.setVerdict("UNKNOWN");
+                malware.setMalicious(false);
+                malware.setFileHash(normalizedHash);
+                malware.setDescription("No threat intel available");
+            }
+            redis.opsForValue().set(cacheKey, malware, Duration.ofHours(6));
+        }
+
+        event.getRawData().put("malware", malware);
+    }
+
+    private GeoInfo lookupGeoWithCache(String ip) {
+        String cacheKey = "ip:" + ip;
+        GeoInfo geo = (GeoInfo) redis.opsForValue().get(cacheKey);
+        if (geo == null) {
+            geo = geoIpService.lookup(ip);
+            if (geo != null) {
+                redis.opsForValue().set(cacheKey, geo, Duration.ofDays(7));
+            }
+        }
+        return geo;
     }
 }

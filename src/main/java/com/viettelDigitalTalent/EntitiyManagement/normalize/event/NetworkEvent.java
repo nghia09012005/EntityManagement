@@ -7,10 +7,10 @@ import lombok.EqualsAndHashCode;
 
 @EqualsAndHashCode(callSuper = true)
 @Data
-@JsonTypeName("PROCESS")
-public class ProcessEvent extends BaseEvent {
-    private String processName;
-    private String processPath;
-    private String fileHash; // Trường này dùng để làm Enrichment key
-    private String commandLine;
+@JsonTypeName("NETWORK")
+public class NetworkEvent extends BaseEvent {
+    private String srcIp;
+    private String dstIp;
+    private String dstDomain;
+    private int dstPort;
 }

@@ -28,10 +28,12 @@ public class ProcessEventParser implements EventParser {
             event.setFileHash(JsonUtils.extractValue(root, "fileHash", "file_hash", "sha256", "md5"));
             event.setCommandLine(JsonUtils.extractValue(root, "commandLine", "command_line", "cmd"));
 
+            String hostname = JsonUtils.extractValue(root, "hostname", "host", "machine", "computer");
             event.getRawData().put("processName", event.getProcessName());
             event.getRawData().put("processPath", event.getProcessPath());
             event.getRawData().put("fileHash", event.getFileHash());
             event.getRawData().put("commandLine", event.getCommandLine());
+            if (hostname != null) event.getRawData().put("hostname", hostname);
 
             event.setTimestamp(LocalDateTime.now());
             event.setCategory(EventCategory.PROCESS.name());

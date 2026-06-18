@@ -1,6 +1,7 @@
 package com.viettelDigitalTalent.EntitiyManagement.management.controller;
 
 import com.viettelDigitalTalent.EntitiyManagement.management.dto.FileUploadResponse;
+import com.viettelDigitalTalent.EntitiyManagement.ingestion.service.FileIngestionService;
 import com.viettelDigitalTalent.EntitiyManagement.management.service.MinioService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -16,14 +17,16 @@ import org.springframework.web.multipart.MultipartFile;
 public class FileController {
 
     private final MinioService minioService;
+    private final FileIngestionService fileIngestionService;
 
     @PostMapping("/upload")
     public ResponseEntity<FileUploadResponse> upload(
             @RequestParam("file") MultipartFile file
     ) throws Exception {
 
-        return ResponseEntity.ok(
-                minioService.uploadFile(file)
-        );
+        FileUploadResponse uploadResponse = minioService.uploadFile(file);
+        fileIngestionService.ingestFileAsync(uploadResponse.getFileName());
+
+        return ResponseEntity.accepted().body(uploadResponse);
     }
 }
