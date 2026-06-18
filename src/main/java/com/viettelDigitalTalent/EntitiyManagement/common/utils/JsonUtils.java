@@ -10,6 +10,6 @@ public class JsonUtils {
                 return field.asText();
             }
         }
-        return "UNKNOWN"; // Hoặc null tùy logic của bạn
+        return null;
     }
 }

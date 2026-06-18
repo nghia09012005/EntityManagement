@@ -72,6 +72,14 @@ public class FileIngestionService {
             return "process";
         }
 
+        if (normalizedFileName.contains("alert") || normalizedFileName.contains("threat")) {
+            return "alert";
+        }
+
+        if (normalizedFileName.contains("network") || normalizedFileName.contains("net") || normalizedFileName.contains("conn")) {
+            return "network";
+        }
+
         throw new IllegalArgumentException("Cannot resolve source from fileName: " + fileName);
     }
 }
