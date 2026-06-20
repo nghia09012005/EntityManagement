@@ -2,6 +2,7 @@ package com.viettelDigitalTalent.EntitiyManagement.queue.worker;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.viettelDigitalTalent.EntitiyManagement.enrichment.core.EnrichmentService;
+import com.viettelDigitalTalent.EntitiyManagement.llm.core.LlmProcess;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.alert.AlertEvent;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.base.BaseEvent;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.base.EventCategory;
@@ -44,6 +45,9 @@ public class ParserWorker {
 
     @Autowired
     private GraphEntityService graphEntityService;
+
+    @Autowired
+    private LlmProcess llmProcess;
 
     @Autowired
     private MeterRegistry meterRegistry;
@@ -90,27 +94,46 @@ public class ParserWorker {
             // Bước 1 (sync): Lưu raw log ngay trên Kafka consumer thread — đảm bảo document
             // tồn tại trước khi bất kỳ async task nào chạy updateEnrichment (tránh race condition).
             try {
-                log.info("[DEBUG] Trước khi lưu: ID={}, Category={}, RawDataSize={}",
-                        eventId, eventCategory, (event.getRawData() != null ? event.getRawData().size() : "NULL"));
                 auditLogRepository.saveRawLog(eventId, eventSource, eventCategory, timestamp, rawDataSnapshot);
                 log.info("[consumer] Lưu raw log thành công cho ID: {}", eventId);
             } catch (Exception e) {
                 log.error("[consumer] Lỗi khi lưu raw log cho ID: {}", eventId, e);
             }
 
-            // Bước 2 (async): Enrich → cập nhật MongoDB enrichment
+            // Bước 2 (async): LLM (nếu free-text) → Enrich → cập nhật MongoDB enrichment
             // Bước 3 (async, sau bước 2): Lưu entity graph vào Neo4j
+            boolean isFreeText = !rawJson.trim().startsWith("{") && !rawJson.trim().startsWith("[");
+
             CompletableFuture.runAsync(() -> {
                 String threadName = Thread.currentThread().getName();
                 try {
+                    // Nếu là free-text, chạy LLM async để bổ sung entity fields vào placeholder event
+                    if (isFreeText && event instanceof AlertEvent alertEvent) {
+                        log.info("[{}] Chạy LLM cho free-text ID: {}", threadName, eventId);
+                        AlertEvent llmResult = llmProcess.extractAlert(rawJson);
+                        if (llmResult != null) {
+                            if (llmResult.getAlertName() != null) alertEvent.setAlertName(llmResult.getAlertName());
+                            if (llmResult.getSeverity()  != null) alertEvent.setSeverity(llmResult.getSeverity());
+                            if (llmResult.getDescription() != null) alertEvent.setDescription(llmResult.getDescription());
+                            alertEvent.setTargetIp(llmResult.getTargetIp());
+                            alertEvent.setTargetUser(llmResult.getTargetUser());
+                            alertEvent.setTargetHost(llmResult.getTargetHost());
+                            alertEvent.setTargetDomain(llmResult.getTargetDomain());
+                            alertEvent.setTargetFileHash(llmResult.getTargetFileHash());
+                        }
+                    }
+
                     log.info("[{}] Bắt đầu enrich dữ liệu cho ID: {}", threadName, eventId);
                     enrichService.enrich(event);
 
+                    // Copy tất cả enrichment keys mà EnrichmentService thêm vào event.getRawData()
                     Map<String, Object> enrichmentData = new HashMap<>();
-                    if (event.getRawData().containsKey("geo"))     enrichmentData.put("geo",     event.getRawData().get("geo"));
-                    if (event.getRawData().containsKey("malware")) enrichmentData.put("malware", event.getRawData().get("malware"));
-                    if (event.getRawData().containsKey("srcGeo"))  enrichmentData.put("srcGeo",  event.getRawData().get("srcGeo"));
-                    if (event.getRawData().containsKey("dstGeo"))  enrichmentData.put("dstGeo",  event.getRawData().get("dstGeo"));
+                    for (String key : new String[]{ "geo", "malware", "srcGeo", "dstGeo",
+                                                    "ipIntel", "srcIpIntel", "dstIpIntel" }) {
+                        if (event.getRawData().containsKey(key)) {
+                            enrichmentData.put(key, event.getRawData().get(key));
+                        }
+                    }
 
                     auditLogRepository.updateEnrichment(eventId, enrichmentData);
                     log.info("[{}] Cập nhật enrich thành công cho ID: {}", threadName, eventId);

@@ -50,6 +50,19 @@ minio:
 virustotal:
   api-key: 3c89ae4118ce7b88be512ab34608bcbe4f81d845ee00829dd6889186e13e92b3
 
+# LLM fallback chain: Gemini → Groq → Mock
+# Bỏ comment key nào thì client đó được bật; thứ tự ưu tiên như trên
+gemini:
+  api-key: AQ.Ab8RN6Lp0P_NFh-zsGAznU-9k666YyluAt4g6ShyMaStOUSI6A   # https://aistudio.google.com/app/apikey
+groq:
+  api-key: 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   # https://console.groq.com/keys (free)
+
+# Threat intelligence — bỏ comment và điền key thật để bật real implementation
+abuseipdb:
+   api-key: 318a6b99b99071359489f94e7517f1c9beb824171ec18ed6ce531a7a51cb018f5e6b7c7ed1402c75  # https://www.abuseipdb.com/account/api
+otx:
+   api-key: 1e6c8e740611e066be69e03b6982fc6ac4d2be3e71ca019397ab9012d6d54f9d         # https://otx.alienvault.com/api
+
 management:
   endpoints:
     web:

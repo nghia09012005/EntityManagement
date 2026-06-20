@@ -1,8 +1,10 @@
 package com.viettelDigitalTalent.EntitiyManagement.enrichment.core;
 
 import com.viettelDigitalTalent.EntitiyManagement.enrichment.dtos.GeoInfo;
+import com.viettelDigitalTalent.EntitiyManagement.enrichment.dtos.IpIntelInfo;
 import com.viettelDigitalTalent.EntitiyManagement.enrichment.dtos.MalwareInfo;
 import com.viettelDigitalTalent.EntitiyManagement.enrichment.geoip.GeoIpService;
+import com.viettelDigitalTalent.EntitiyManagement.enrichment.ipintel.IpIntelligenceService;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.alert.AlertEvent;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.base.BaseEvent;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.event.AuthenticationEvent;
@@ -22,8 +24,8 @@ import java.time.Duration;
 @Service
 public class EnrichmentService {
 
-    @Autowired
-    private GeoIpService geoIpService;
+    @Autowired private GeoIpService geoIpService;
+    @Autowired private IpIntelligenceService ipIntelligenceService;
     @Autowired(required = false)
     private com.viettelDigitalTalent.EntitiyManagement.enrichment.threatintel.ThreatIntelService threatIntelService;
     @Autowired private RedisTemplate<String, Object> redis;
@@ -123,16 +125,13 @@ public class EnrichmentService {
 
     private void enrichGeoIp(AuthenticationEvent event) {
         String ipAddress = event.getIpAddress();
-        log.info("[Ip address:] {}", ipAddress);
-
-        if (ipAddress == null || ipAddress.isBlank()) {
-            return;
-        }
+        if (ipAddress == null || ipAddress.isBlank()) return;
 
         GeoInfo geo = lookupGeoWithCache(ipAddress);
-        if (geo != null) {
-            event.getRawData().put("geo", geo);
-        }
+        if (geo != null) event.getRawData().put("geo", geo);
+
+        IpIntelInfo intel = ipIntelligenceService.enrich(ipAddress);
+        if (intel != null) event.getRawData().put("ipIntel", intel);
     }
 
     private void enrichFileHash(ProcessEvent event) {
@@ -176,27 +175,29 @@ public class EnrichmentService {
     private void enrichNetworkGeoIp(NetworkEvent event) {
         if (event.getSrcIp() != null && !event.getSrcIp().isBlank()) {
             GeoInfo srcGeo = lookupGeoWithCache(event.getSrcIp());
-            if (srcGeo != null) {
-                event.getRawData().put("srcGeo", srcGeo);
-            }
+            if (srcGeo != null) event.getRawData().put("srcGeo", srcGeo);
+
+            IpIntelInfo srcIntel = ipIntelligenceService.enrich(event.getSrcIp());
+            if (srcIntel != null) event.getRawData().put("srcIpIntel", srcIntel);
         }
 
         if (event.getDstIp() != null && !event.getDstIp().isBlank()) {
             GeoInfo dstGeo = lookupGeoWithCache(event.getDstIp());
-            if (dstGeo != null) {
-                event.getRawData().put("dstGeo", dstGeo);
-            }
+            if (dstGeo != null) event.getRawData().put("dstGeo", dstGeo);
+
+            IpIntelInfo dstIntel = ipIntelligenceService.enrich(event.getDstIp());
+            if (dstIntel != null) event.getRawData().put("dstIpIntel", dstIntel);
         }
     }
 
     private void enrichAlertGeoIp(AlertEvent event) {
-        if (event.getTargetIp() == null || event.getTargetIp().isBlank()) {
-            return;
-        }
+        if (event.getTargetIp() == null || event.getTargetIp().isBlank()) return;
+
         GeoInfo geo = lookupGeoWithCache(event.getTargetIp());
-        if (geo != null) {
-            event.getRawData().put("geo", geo);
-        }
+        if (geo != null) event.getRawData().put("geo", geo);
+
+        IpIntelInfo intel = ipIntelligenceService.enrich(event.getTargetIp());
+        if (intel != null) event.getRawData().put("ipIntel", intel);
     }
 
     private void enrichAlertFileHash(AlertEvent event) {

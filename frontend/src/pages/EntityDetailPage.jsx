@@ -167,7 +167,9 @@ export default function EntityDetailPage() {
           <div className="card">
             <div className="card-header">
               <span className="card-title">Graph Visualization</span>
-              <span className="card-count">1-hop neighbors</span>
+              <span className="card-count">
+                {graph?.nodes?.length ?? 0} nodes · {graph?.edges?.length ?? 0} edges
+              </span>
             </div>
             <GraphView data={graph} />
           </div>

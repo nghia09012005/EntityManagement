@@ -1,16 +1,100 @@
-# React + Vite
+# SOC Entity Graph — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + Vite SPA để khám phá entity graph từ hệ thống SOC (Security Operations Center).
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Yêu cầu
 
-## React Compiler
+| Tool | Phiên bản |
+|------|-----------|
+| Node.js | ≥ 18 |
+| npm | ≥ 9 |
+| Backend | chạy tại `http://localhost:8080` |
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## Cài đặt & chạy
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```bash
+cd frontend
+npm install
+npm run dev        # dev server tại http://localhost:5173
+npm run build      # build production vào dist/
+npm run preview    # preview production build
+```
+
+---
+
+## Cấu trúc
+
+```
+src/
+├── api.js                       # Tất cả HTTP call về backend
+├── App.jsx                      # Router root + Navbar
+├── components/
+│   ├── EntityBadge.jsx          # Chip màu theo loại entity
+│   ├── GraphView.jsx            # Visualization chính (vis-network)
+│   └── UploadPanel.jsx          # Upload file log
+└── pages/
+    ├── EntityListPage.jsx       # Trang chủ — danh sách entity theo tab
+    └── EntityDetailPage.jsx     # Chi tiết entity + graph 1-hop
+```
+
+---
+
+## Tính năng
+
+### Upload log
+- Kéo thả hoặc click để chọn file `.log` / `.txt` / `.json`
+- Nhiều file cùng lúc; file được gửi tới `POST /api/files/upload` → backend đưa vào Kafka pipeline
+
+### Entity List (`/`)
+Tabs: **User · Host · IP · Domain · FileHash**
+
+Mỗi tab gọi `GET /api/graph/entities/{type}` và hiển thị bảng entity đã tồn tại trong Neo4j.
+
+### Entity Detail (`/entity/:type/:value`)
+- Thông tin cơ bản + enrichment data (GeoIP, malware verdict, IP intel)
+- Bảng quan hệ 1-hop (relationship type, firstSeen, lastSeen, count)
+- Graph visualization tương tác (xem bên dưới)
+
+---
+
+## Graph Visualization
+
+Component `GraphView` dùng **vis-network** với các tính năng:
+
+| Tính năng | Cách dùng |
+|-----------|-----------|
+| **Expand node** | Double-click vào node → tải neighbors và merge vào graph. Node đã expand có border dashed |
+| **Pivot** | Right-click vào node → chuyển tới trang detail của node đó |
+| **Open selected** | Click chọn node → nút "Open [label]" xuất hiện trên toolbar |
+| **Fit view** | Nút **Fit** — reset zoom/pan vừa màn hình |
+| **Layout Force** | Force-directed (forceAtlas2Based physics) |
+| **Layout Hierarchical** | Cây top-down, tắt physics |
+| **Lọc relation type** | Checkboxes — ẩn/hiện edge theo loại quan hệ |
+| **Lọc thời gian** | Date range lọc edge theo `firstSeen` |
+| **Export PNG** | Nút **↓ PNG** — download ảnh canvas |
+| **Export JSON** | Nút **↓ JSON** — download `subgraph.json` với nodes + edges hiện tại |
+
+---
+
+## API endpoints dùng trong frontend
+
+| Method | Endpoint | Mô tả |
+|--------|----------|-------|
+| `POST` | `/api/files/upload` | Upload file log (multipart) |
+| `GET`  | `/api/graph/entities/{type}` | Danh sách entity theo loại |
+| `GET`  | `/api/graph/{label}/{value}/neighbors?hops=1` | Subgraph 1-hop quanh entity |
+
+---
+
+## Dependencies chính
+
+| Package | Dùng cho |
+|---------|----------|
+| `react` + `react-dom` | UI framework |
+| `react-router-dom` | Client-side routing |
+| `vis-network` | Graph visualization |
+| `vis-data` | DataSet (nodes/edges mutables) |
