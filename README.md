@@ -362,39 +362,156 @@ dead-letter-topic
 
 ## 🚀 API Examples
 
-### Ingest Log
+> Xem đầy đủ tại [API_ENDPOINTS.md](API_ENDPOINTS.md) hoặc [Swagger UI](http://localhost:8080/swagger-ui.html)
 
-```http
-POST /api/v1/logs
+### Ingest log (tự detect loại event)
+
+```bash
+POST /api/v1/ingest
+Content-Type: text/plain
+
+{"user":"admin","ip":"1.2.3.4","is_success":true,"workstation":"WIN-PC01"}
 ```
 
-**Request:**
+### Upload file log
 
-```json
-{
-  "source": "windows",
-  "payload": {
-    "event_id": 4625
-  }
-}
+```bash
+curl -X POST http://localhost:8080/api/files/upload \
+  -F "file=@dataset/alert-events.log"
+```
+
+### Truy vấn graph entity
+
+```bash
+GET /api/graph/user/admin/neighbors?hops=2
+GET /api/graph/entities/ip
 ```
 
 ---
 
-### Create Rule
+## 🚀 Cách chạy dự án
 
-```http
-POST /api/v1/rules
+### Yêu cầu
+
+| Tool | Version |
+|---|---|
+| Java | 21+ |
+| Maven | 3.8+ |
+| Node.js | 18+ |
+| Docker & Docker Compose | latest |
+
+---
+
+### Bước 1 — Khởi động Infrastructure
+
+```bash
+docker-compose up -d
 ```
 
-**Request:**
+Chờ tất cả service healthy (~30 giây):
 
-```json
-{
-  "name": "Brute Force",
-  "enabled": true,
-  "severity": "HIGH"
-}
+| Service | Port | Mục đích |
+|---|---|---|
+| Kafka | 9092 | Message queue |
+| Zookeeper | 2181 | Kafka coordinator |
+| MongoDB | 27017 | Lưu raw log & audit |
+| Redis | 6379 | Cache GeoIP / malware |
+| MinIO | 9000 / 9001 | Object storage cho file log |
+| Neo4j | 7474 / 7687 | Graph database |
+| Prometheus | 9090 | Metrics scraping |
+| Grafana | 3000 | Dashboard monitoring |
+
+Kiểm tra status:
+```bash
+docker-compose ps
+```
+
+---
+
+### Bước 2 — Khởi động Backend (Spring Boot)
+
+```bash
+mvn spring-boot:run
+```
+
+Backend chạy tại: **http://localhost:8080**
+
+---
+
+### Bước 3 — Khởi động Frontend (React)
+
+```bash
+cd frontend
+npm install       # chỉ cần lần đầu
+npm run dev
+```
+
+Frontend chạy tại: **http://localhost:5173**
+
+---
+
+### Bước 4 — Upload sample data
+
+Upload 4 file log mẫu để tạo đầy đủ entity và quan hệ trong Neo4j:
+
+```bash
+# Window login events (User, Host, IP)
+curl -X POST http://localhost:8080/api/files/upload \
+  -F "file=@dataset/window-login.log"
+
+# Process events (FileHash, Host)
+curl -X POST http://localhost:8080/api/files/upload \
+  -F "file=@dataset/process-sample.log"
+
+# Network traffic (IP, Domain)
+curl -X POST http://localhost:8080/api/files/upload \
+  -F "file=@dataset/network-traffic.log"
+
+# Alert events (tất cả 5 entity)
+curl -X POST http://localhost:8080/api/files/upload \
+  -F "file=@dataset/alert-events.log"
+```
+
+---
+
+### Bước 5 — Xem kết quả
+
+| URL | Mô tả |
+|---|---|
+| http://localhost:5173 | UI danh sách & graph entity |
+| http://localhost:8080/swagger-ui.html | Swagger UI — API documentation |
+| http://localhost:8080/v3/api-docs | OpenAPI JSON spec |
+| http://localhost:8080/actuator/health | Health check tổng thể |
+| http://localhost:8080/actuator/health/liveness | Liveness probe |
+| http://localhost:8080/actuator/health/readiness | Readiness probe |
+| http://localhost:8080/actuator/prometheus | Prometheus metrics endpoint |
+| http://localhost:9090 | Prometheus UI |
+| http://localhost:3000 | Grafana dashboard (admin / admin) |
+| http://localhost:7474 | Neo4j Browser (neo4j / password123) |
+| http://localhost:9001 | MinIO Console (admin / password123) |
+
+Query nhanh trong Neo4j Browser:
+```cypher
+MATCH (n)-[r]->(m) RETURN n, r, m LIMIT 50
+```
+
+#### Grafana dashboard "SOC Entity Management" hiển thị:
+- **Entity Saved** — số entity được ghi vào Neo4j theo loại (Auth/Process/Network/Alert)
+- **Events Processed** — tổng events qua Kafka pipeline
+- **Enrichment Duration** — latency p50/p99 của bước làm giàu dữ liệu
+- **HTTP Request Rate / Error Rate** — traffic vào REST API
+- **JVM Memory, GC, Thread count** — sức khoẻ JVM
+
+---
+
+### Dừng toàn bộ
+
+```bash
+# Dừng Docker services
+docker-compose down
+
+# Xóa luôn data (nếu cần reset)
+docker-compose down -v
 ```
 
 ---
@@ -414,8 +531,11 @@ docker-compose up -d
 | Kafka       | Event streaming          |
 | Zookeeper   | Kafka coordination       |
 | MongoDB     | Raw & normalized storage |
-| PostgreSQL  | Structured management DB |
+| Redis       | Enrichment cache         |
+| MinIO       | File object storage      |
 | Neo4j       | Graph analytics          |
+| Prometheus  | Metrics scraping         |
+| Grafana     | Monitoring dashboard     |
 
 
 

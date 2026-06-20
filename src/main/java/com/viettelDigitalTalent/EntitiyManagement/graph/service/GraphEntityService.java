@@ -7,7 +7,8 @@ import com.viettelDigitalTalent.EntitiyManagement.normalize.base.BaseEvent;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.event.AuthenticationEvent;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.event.NetworkEvent;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.event.ProcessEvent;
-import lombok.RequiredArgsConstructor;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.neo4j.core.Neo4jClient;
 import org.springframework.stereotype.Service;
@@ -18,37 +19,52 @@ import java.util.Map;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class GraphEntityService {
 
     private final Neo4jClient neo4jClient;
+    private final Counter authCounter;
+    private final Counter processCounter;
+    private final Counter networkCounter;
+    private final Counter alertCounter;
+
+    public GraphEntityService(Neo4jClient neo4jClient, MeterRegistry meterRegistry) {
+        this.neo4jClient = neo4jClient;
+        this.authCounter    = Counter.builder("soc.entity.saved").tag("event_type", "AUTHENTICATION").register(meterRegistry);
+        this.processCounter = Counter.builder("soc.entity.saved").tag("event_type", "PROCESS").register(meterRegistry);
+        this.networkCounter = Counter.builder("soc.entity.saved").tag("event_type", "NETWORK").register(meterRegistry);
+        this.alertCounter   = Counter.builder("soc.entity.saved").tag("event_type", "ALERT").register(meterRegistry);
+    }
 
     public void save(BaseEvent event) {
         try {
             LocalDateTime now = event.getTimestamp() != null ? event.getTimestamp() : LocalDateTime.now();
-            if (event instanceof AuthenticationEvent auth) saveAuth(auth, now);
-            else if (event instanceof ProcessEvent proc)    saveProcess(proc, now);
-            else if (event instanceof NetworkEvent net)     saveNetwork(net, now);
-            else if (event instanceof AlertEvent alert)     saveAlert(alert, now);
+            String eid = event.getEventId();
+            if (event instanceof AuthenticationEvent auth) { saveAuth(auth, now, eid);    authCounter.increment(); }
+            else if (event instanceof ProcessEvent proc)   { saveProcess(proc, now, eid); processCounter.increment(); }
+            else if (event instanceof NetworkEvent net)    { saveNetwork(net, now, eid);  networkCounter.increment(); }
+            else if (event instanceof AlertEvent alert)    { saveAlert(alert, now, eid);  alertCounter.increment(); }
         } catch (Exception e) {
             log.error("[Graph] Lỗi khi lưu entity cho event {}: {}", event.getEventId(), e.getMessage(), e);
         }
     }
 
-    private void saveAuth(AuthenticationEvent e, LocalDateTime now) {
+    private void saveAuth(AuthenticationEvent e, LocalDateTime now, String eventId) {
         if (e.getUsername() == null || e.getWorkstation() == null) return;
 
         Map<String, Object> p = new HashMap<>();
         p.put("username", e.getUsername());
         p.put("hostname", e.getWorkstation());
         p.put("now", now.toString());
+        p.put("eventId", eventId);
 
         neo4jClient.query("""
                 MERGE (u:User {username: $username})
                 MERGE (h:Host {hostname: $hostname})
                 MERGE (u)-[r:LOGGED_IN_TO]->(h)
-                ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1
-                ON MATCH SET  r.lastSeen = $now, r.count = r.count + 1
+                ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1,
+                              r.firstEventId = $eventId, r.lastEventId = $eventId
+                ON MATCH SET  r.lastSeen = $now, r.count = r.count + 1,
+                              r.lastEventId = $eventId
                 """).bindAll(p).run();
 
         if (e.getIpAddress() != null && !e.getIpAddress().isBlank()) {
@@ -59,6 +75,7 @@ public class GraphEntityService {
             ip.put("asn",     geo != null ? geo.getAsn()     : null);
             ip.put("hostname", e.getWorkstation());
             ip.put("now", now.toString());
+            ip.put("eventId", eventId);
 
             neo4jClient.query("""
                     MERGE (ip:IP {address: $address})
@@ -68,13 +85,15 @@ public class GraphEntityService {
                     WITH ip
                     MATCH (h:Host {hostname: $hostname})
                     MERGE (ip)-[r:AUTHENTICATED_TO]->(h)
-                    ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1
-                    ON MATCH SET  r.lastSeen = $now, r.count = r.count + 1
+                    ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1,
+                                  r.firstEventId = $eventId, r.lastEventId = $eventId
+                    ON MATCH SET  r.lastSeen = $now, r.count = r.count + 1,
+                                  r.lastEventId = $eventId
                     """).bindAll(ip).run();
         }
     }
 
-    private void saveProcess(ProcessEvent e, LocalDateTime now) {
+    private void saveProcess(ProcessEvent e, LocalDateTime now, String eventId) {
         if (e.getFileHash() == null) return;
 
         MalwareInfo mal = (MalwareInfo) e.getRawData().get("malware");
@@ -86,6 +105,7 @@ public class GraphEntityService {
         p.put("malicious", mal != null && mal.isMalicious());
         p.put("family",    mal != null ? mal.getFamily()  : null);
         p.put("now",       now.toString());
+        p.put("eventId",   eventId);
 
         neo4jClient.query("""
                 MERGE (f:FileHash {hash: $hash})
@@ -103,13 +123,15 @@ public class GraphEntityService {
                     MATCH (f:FileHash {hash: $hash})
                     MERGE (h:Host {hostname: $hostname})
                     MERGE (f)-[r:EXECUTED_ON]->(h)
-                    ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1, r.processName = $processName
-                    ON MATCH SET  r.lastSeen = $now, r.count = r.count + 1
+                    ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1, r.processName = $processName,
+                                  r.firstEventId = $eventId, r.lastEventId = $eventId
+                    ON MATCH SET  r.lastSeen = $now, r.count = r.count + 1,
+                                  r.lastEventId = $eventId
                     """).bindAll(p).run();
         }
     }
 
-    private void saveNetwork(NetworkEvent e, LocalDateTime now) {
+    private void saveNetwork(NetworkEvent e, LocalDateTime now, String eventId) {
         if (e.getSrcIp() == null || e.getDstIp() == null) return;
 
         GeoInfo srcGeo = (GeoInfo) e.getRawData().get("srcGeo");
@@ -124,6 +146,7 @@ public class GraphEntityService {
         p.put("dstAsn",     dstGeo != null ? dstGeo.getAsn()     : null);
         p.put("dstPort",    e.getDstPort());
         p.put("now",        now.toString());
+        p.put("eventId",    eventId);
 
         neo4jClient.query("""
                 MERGE (src:IP {address: $srcAddress})
@@ -135,8 +158,10 @@ public class GraphEntityService {
                 ON MATCH SET  dst.country = coalesce($dstCountry, dst.country),
                               dst.asn     = coalesce($dstAsn,     dst.asn)
                 MERGE (src)-[r:CONNECTED_TO]->(dst)
-                ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1, r.dstPort = $dstPort
-                ON MATCH SET  r.lastSeen = $now, r.count = r.count + 1
+                ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1, r.dstPort = $dstPort,
+                              r.firstEventId = $eventId, r.lastEventId = $eventId
+                ON MATCH SET  r.lastSeen = $now, r.count = r.count + 1,
+                              r.lastEventId = $eventId
                 """).bindAll(p).run();
 
         if (e.getDstDomain() != null && !e.getDstDomain().isBlank()) {
@@ -144,18 +169,21 @@ public class GraphEntityService {
             dp.put("address", e.getDstIp());
             dp.put("domain",  e.getDstDomain());
             dp.put("now",     now.toString());
+            dp.put("eventId", eventId);
 
             neo4jClient.query("""
                     MATCH (ip:IP {address: $address})
                     MERGE (d:Domain {name: $domain})
                     MERGE (ip)-[r:RESOLVES_TO]->(d)
-                    ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1
-                    ON MATCH SET  r.lastSeen = $now, r.count = r.count + 1
+                    ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1,
+                                  r.firstEventId = $eventId, r.lastEventId = $eventId
+                    ON MATCH SET  r.lastSeen = $now, r.count = r.count + 1,
+                                  r.lastEventId = $eventId
                     """).bindAll(dp).run();
         }
     }
 
-    private void saveAlert(AlertEvent e, LocalDateTime now) {
+    private void saveAlert(AlertEvent e, LocalDateTime now, String eventId) {
         if (e.getTargetUser() != null && e.getTargetIp() != null) {
             GeoInfo geo = (GeoInfo) e.getRawData().get("geo");
             Map<String, Object> p = new HashMap<>();
@@ -166,6 +194,7 @@ public class GraphEntityService {
             p.put("alertName", e.getAlertName());
             p.put("severity",  e.getSeverity());
             p.put("now",       now.toString());
+            p.put("eventId",   eventId);
 
             neo4jClient.query("""
                     MERGE (u:User {username: $username})
@@ -175,8 +204,10 @@ public class GraphEntityService {
                                   ip.asn     = coalesce($asn,     ip.asn)
                     MERGE (u)-[r:ALERTED_FROM]->(ip)
                     ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1,
-                                  r.alertName = $alertName, r.severity = $severity
-                    ON MATCH SET  r.lastSeen = $now, r.count = r.count + 1
+                                  r.alertName = $alertName, r.severity = $severity,
+                                  r.firstEventId = $eventId, r.lastEventId = $eventId
+                    ON MATCH SET  r.lastSeen = $now, r.count = r.count + 1,
+                                  r.lastEventId = $eventId
                     """).bindAll(p).run();
         }
 
@@ -189,6 +220,7 @@ public class GraphEntityService {
             p.put("family",    mal != null ? mal.getFamily()  : null);
             p.put("address",   e.getTargetIp());
             p.put("now",       now.toString());
+            p.put("eventId",   eventId);
 
             neo4jClient.query("""
                     MERGE (f:FileHash {hash: $hash})
@@ -196,9 +228,68 @@ public class GraphEntityService {
                     ON MATCH SET  f.verdict = $verdict, f.malicious = $malicious, f.family = $family
                     MERGE (ip:IP {address: $address})
                     MERGE (f)-[r:DETECTED_ON]->(ip)
-                    ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1
-                    ON MATCH SET  r.lastSeen = $now, r.count = r.count + 1
+                    ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1,
+                                  r.firstEventId = $eventId, r.lastEventId = $eventId
+                    ON MATCH SET  r.lastSeen = $now, r.count = r.count + 1,
+                                  r.lastEventId = $eventId
                     """).bindAll(p).run();
+        }
+
+        // Host entity
+        if (e.getTargetHost() != null && !e.getTargetHost().isBlank()) {
+            Map<String, Object> p = new HashMap<>();
+            p.put("hostname",  e.getTargetHost());
+            p.put("alertName", e.getAlertName());
+            p.put("severity",  e.getSeverity());
+            p.put("now",       now.toString());
+            p.put("eventId",   eventId);
+
+            neo4jClient.query("""
+                    MERGE (h:Host {hostname: $hostname})
+                    """).bindAll(p).run();
+
+            // Liên kết Host với IP nếu có
+            if (e.getTargetIp() != null) {
+                p.put("address", e.getTargetIp());
+                neo4jClient.query("""
+                        MATCH (h:Host {hostname: $hostname})
+                        MERGE (ip:IP {address: $address})
+                        MERGE (ip)-[r:TARGETED_AT]->(h)
+                        ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1,
+                                      r.alertName = $alertName, r.severity = $severity,
+                                      r.firstEventId = $eventId, r.lastEventId = $eventId
+                        ON MATCH SET  r.lastSeen = $now, r.count = r.count + 1,
+                                      r.lastEventId = $eventId
+                        """).bindAll(p).run();
+            }
+        }
+
+        // Domain entity
+        if (e.getTargetDomain() != null && !e.getTargetDomain().isBlank()) {
+            Map<String, Object> p = new HashMap<>();
+            p.put("domain",    e.getTargetDomain());
+            p.put("alertName", e.getAlertName());
+            p.put("severity",  e.getSeverity());
+            p.put("now",       now.toString());
+            p.put("eventId",   eventId);
+
+            neo4jClient.query("""
+                    MERGE (d:Domain {name: $domain})
+                    """).bindAll(p).run();
+
+            // Liên kết Domain với IP nếu có
+            if (e.getTargetIp() != null) {
+                p.put("address", e.getTargetIp());
+                neo4jClient.query("""
+                        MATCH (d:Domain {name: $domain})
+                        MERGE (ip:IP {address: $address})
+                        MERGE (ip)-[r:RESOLVES_TO]->(d)
+                        ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1,
+                                      r.firstEventId = $eventId, r.lastEventId = $eventId
+                        ON MATCH SET  r.lastSeen = $now, r.count = r.count + 1,
+                                      r.lastEventId = $eventId
+                        """).bindAll(p).run();
+            }
         }
     }
 }

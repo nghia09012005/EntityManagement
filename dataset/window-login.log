@@ -1,0 +1,8 @@
+{"user":"admin","ip":"203.0.113.10","is_success":true,"workstation":"WIN-DC01"}
+{"user":"nghia","ip":"198.51.100.25","is_success":true,"workstation":"WIN-PC01"}
+{"user":"admin","ip":"185.220.101.42","is_success":false,"workstation":"WIN-DC01"}
+{"user":"admin","ip":"185.220.101.42","is_success":false,"workstation":"WIN-DC01"}
+{"user":"admin","ip":"185.220.101.42","is_success":false,"workstation":"WIN-DC01"}
+{"user":"attacker","ip":"185.220.101.42","is_success":true,"workstation":"WIN-DC01"}
+{"user":"nghia","ip":"185.220.101.42","is_success":false,"workstation":"SRV-FILE01"}
+{"user":"svc-backup","ip":"192.168.1.100","is_success":true,"workstation":"SRV-FILE01"}

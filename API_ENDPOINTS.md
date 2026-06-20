@@ -2,25 +2,41 @@
 
 Base URL: `http://localhost:8080`
 
+Swagger UI: `http://localhost:8080/swagger-ui.html`
+OpenAPI JSON: `http://localhost:8080/v3/api-docs`
+
 ---
 
 ## 1. Ingestion — Nhận log trực tiếp
 
-### POST `/api/v1/ingest/{source}`
+### POST `/api/v1/ingest`
 
-Gửi một dòng log thô vào Kafka queue để xử lý.
+Gửi một dòng log thô vào Kafka queue. Hệ thống **tự động nhận dạng** loại event từ nội dung JSON, không cần truyền source.
 
 | Param | Loại | Bắt buộc | Mô tả |
 |---|---|---|---|
-| `source` | path | ✅ | Nguồn log: `windows` hoặc `process` |
-| body | raw string | ✅ | Nội dung log thô (JSON hoặc plain text) |
+| body | raw string / JSON | ✅ | Nội dung log thô |
+
+**Auto-detect logic:**
+- Có field `eventType` → Jackson polymorphism (`AUTHENTICATION`, `PROCESS`, `NETWORK`, `ALERT`)
+- Có `processName` / `commandLine` → ProcessEvent
+- Có `srcIp` / `dstIp` → NetworkEvent
+- Có `alertName` / `severity` → AlertEvent
+- Còn lại → AuthenticationEvent (Windows)
 
 **Request:**
 ```
-POST /api/v1/ingest/windows
+POST /api/v1/ingest
 Content-Type: text/plain
 
-{"eventType":"AUTHENTICATION","username":"admin","ipAddress":"1.2.3.4","workstation":"WIN-PC01","success":true}
+{"user":"admin","ip":"1.2.3.4","is_success":true,"workstation":"WIN-PC01"}
+```
+
+```
+POST /api/v1/ingest
+Content-Type: text/plain
+
+{"eventType":"ALERT","alertName":"Brute Force","severity":"HIGH","targetIp":"1.2.3.4"}
 ```
 
 **Response:** `202 Accepted`
@@ -34,26 +50,24 @@ Log queued
 
 ### POST `/api/files/upload`
 
-Upload file log lên MinIO, sau đó tự động đọc từng dòng và đẩy vào Kafka (async).  
-Source được suy ra từ tên file: chứa `windows`/`auth`/`login` → `windows`; chứa `process`/`proc` → `process`.
+Upload file log lên MinIO, sau đó tự động đọc từng dòng và đẩy vào Kafka (async).
+Mỗi dòng được **tự động nhận dạng** loại event — không phụ thuộc vào tên file.
 
 | Param | Loại | Bắt buộc | Mô tả |
 |---|---|---|---|
-| `file` | multipart form-data | ✅ | File log (.log, .txt, …) tối đa 100MB |
+| `file` | multipart form-data | ✅ | File log (.log, .txt, …) |
 
 **Request:**
-```
-POST /api/files/upload
-Content-Type: multipart/form-data
-
-file=@windows-auth.log
+```bash
+curl -X POST http://localhost:8080/api/files/upload \
+  -F "file=@dataset/alert-events.log"
 ```
 
 **Response:** `202 Accepted`
 ```json
 {
-  "fileName": "windows-auth.log",
-  "url": "http://localhost:9000/uploads/windows-auth.log"
+  "fileName": "alert-events.log",
+  "url": "http://localhost:9000/uploads/alert-events.log"
 }
 ```
 
@@ -68,10 +82,10 @@ Lấy các node và quan hệ lân cận của một entity (1 hoặc 2 hop).
 | Param | Loại | Bắt buộc | Giá trị hợp lệ | Mô tả |
 |---|---|---|---|---|
 | `label` | path | ✅ | `user` \| `host` \| `ip` \| `domain` \| `filehash` | Loại entity |
-| `value` | path | ✅ | e.g. `admin`, `192.168.1.1` | Giá trị định danh entity |
+| `value` | path | ✅ | e.g. `admin`, `192.168.1.1` | Giá trị định danh |
 | `hops` | query | ❌ | `1` \| `2` (default: `1`) | Độ sâu truy vấn |
 
-| label | Trường định danh | Ví dụ value |
+| label | Trường định danh | Ví dụ |
 |---|---|---|
 | `user` | `username` | `admin` |
 | `host` | `hostname` | `WIN-PC01` |
@@ -88,15 +102,38 @@ GET /api/graph/user/admin/neighbors?hops=2
 ```json
 {
   "nodes": [
-    { "id": "User:admin",    "label": "User",    "properties": { "username": "admin" } },
-    { "id": "Host:WIN-PC01", "label": "Host",    "properties": { "hostname": "WIN-PC01" } },
-    { "id": "IP:1.2.3.4",   "label": "IP",      "properties": { "address": "1.2.3.4", "country": "Vietnam", "asn": "AS7552 - Viettel" } }
+    { "id": "User:admin",    "label": "User", "properties": { "username": "admin" } },
+    { "id": "Host:WIN-PC01", "label": "Host", "properties": { "hostname": "WIN-PC01" } },
+    { "id": "IP:1.2.3.4",   "label": "IP",   "properties": { "address": "1.2.3.4", "country": "Vietnam", "asn": "AS7552" } }
   ],
   "edges": [
-    { "from": "User:admin", "to": "Host:WIN-PC01", "type": "LOGGED_IN_TO",   "properties": { "firstSeen": "2026-06-18T10:00:00", "lastSeen": "2026-06-18T12:00:00", "count": 5 } },
+    { "from": "User:admin", "to": "Host:WIN-PC01", "type": "LOGGED_IN_TO",      "properties": { "firstSeen": "2026-06-18T10:00:00", "lastSeen": "2026-06-18T12:00:00", "count": 5 } },
     { "from": "IP:1.2.3.4", "to": "Host:WIN-PC01", "type": "AUTHENTICATED_TO", "properties": { "firstSeen": "2026-06-18T10:00:00", "lastSeen": "2026-06-18T10:00:00", "count": 1 } }
   ]
 }
+```
+
+---
+
+### GET `/api/graph/entities/{type}`
+
+Liệt kê tất cả entity của một loại.
+
+| Param | Loại | Bắt buộc | Giá trị hợp lệ |
+|---|---|---|---|
+| `type` | path | ✅ | `user` \| `host` \| `ip` \| `domain` \| `filehash` |
+
+**Request:**
+```
+GET /api/graph/entities/ip
+```
+
+**Response:** `200 OK`
+```json
+[
+  { "id": "IP:203.0.113.10",  "label": "IP", "properties": { "address": "203.0.113.10",  "country": "Vietnam",       "asn": "AS7552" } },
+  { "id": "IP:198.51.100.25", "label": "IP", "properties": { "address": "198.51.100.25", "country": "United States", "asn": "AS15169" } }
+]
 ```
 
 ---
@@ -106,11 +143,6 @@ GET /api/graph/user/admin/neighbors?hops=2
 ### GET `/api/internal/threat-intel/provider`
 
 Kiểm tra nhà cung cấp threat intel đang active.
-
-**Request:**
-```
-GET /api/internal/threat-intel/provider
-```
 
 **Response:** `200 OK`
 ```
@@ -131,3 +163,4 @@ hoặc `none` nếu không có provider nào được cấu hình.
 | `RESOLVES_TO` | IP | Domain | NetworkEvent | firstSeen, lastSeen, count |
 | `ALERTED_FROM` | User | IP | AlertEvent | firstSeen, lastSeen, count, alertName, severity |
 | `DETECTED_ON` | FileHash | IP | AlertEvent | firstSeen, lastSeen, count |
+| `TARGETED_AT` | IP | Host | AlertEvent | firstSeen, lastSeen, count |

@@ -91,6 +91,35 @@ public class GraphController {
         return ResponseEntity.ok(new GraphResponse(new ArrayList<>(nodeMap.values()), edges));
     }
 
+    /**
+     * GET /api/graph/entities/{type}
+     * Liệt kê tất cả entity của một loại: user | host | ip | domain | filehash
+     */
+    @GetMapping("/entities/{type}")
+    public ResponseEntity<List<NodeDto>> listEntities(@PathVariable String type) {
+        String nodeLabel = LABEL_MAP.get(type.toLowerCase());
+        if (nodeLabel == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        String idProp = ID_PROP.get(nodeLabel);
+
+        Collection<Map<String, Object>> rows = neo4jClient
+                .query(String.format("MATCH (n:%s) RETURN properties(n) AS props", nodeLabel))
+                .fetch()
+                .all();
+
+        List<NodeDto> nodes = rows.stream()
+                .map(row -> {
+                    Map<String, Object> props = castMap(row.get("props"));
+                    Object val = props.get(idProp);
+                    String id = nodeLabel + ":" + (val != null ? val.toString() : "unknown");
+                    return new NodeDto(id, nodeLabel, props);
+                })
+                .toList();
+
+        return ResponseEntity.ok(nodes);
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> castMap(Object obj) {
         if (obj instanceof Map<?, ?> m) return (Map<String, Object>) m;

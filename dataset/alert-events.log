@@ -1,0 +1,6 @@
+{"eventType":"ALERT","alertName":"Brute Force Login","severity":"HIGH","targetUser":"admin","targetIp":"185.220.101.42","targetHost":"WIN-DC01"}
+{"eventType":"ALERT","alertName":"Credential Dumping Tool Detected","severity":"CRITICAL","targetFileHash":"d41d8cd98f00b204e9800998ecf8427e","targetHost":"WIN-DC01","targetIp":"192.168.1.101"}
+{"eventType":"ALERT","alertName":"C2 Beacon Detected","severity":"HIGH","targetIp":"185.220.101.42","targetDomain":"malware-c2.example.com","targetHost":"WIN-PC01"}
+{"eventType":"ALERT","alertName":"Lateral Movement via PsExec","severity":"HIGH","targetUser":"attacker","targetHost":"SRV-FILE01","targetIp":"192.168.1.100"}
+{"eventType":"ALERT","alertName":"Suspicious PowerShell Execution","severity":"MEDIUM","targetFileHash":"44d88612fea8a8f36de82e1278abb02f","targetHost":"SRV-FILE01","targetIp":"192.168.1.102","targetDomain":"malware-c2.example.com"}
+{"eventType":"ALERT","alertName":"Phishing Domain Access","severity":"MEDIUM","targetUser":"nghia","targetIp":"192.168.1.100","targetDomain":"phishing.badsite.io"}

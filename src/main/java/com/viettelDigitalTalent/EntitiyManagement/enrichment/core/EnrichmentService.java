@@ -9,6 +9,8 @@ import com.viettelDigitalTalent.EntitiyManagement.normalize.event.Authentication
 import com.viettelDigitalTalent.EntitiyManagement.normalize.event.NetworkEvent;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.event.ProcessEvent;
 import com.viettelDigitalTalent.EntitiyManagement.enrichment.threatintel.MockVirusTotalService;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -21,12 +23,14 @@ import java.time.Duration;
 public class EnrichmentService {
 
     @Autowired
-    private GeoIpService geoIpService;      // API/Library GeoIP
+    private GeoIpService geoIpService;
     @Autowired(required = false)
     private com.viettelDigitalTalent.EntitiyManagement.enrichment.threatintel.ThreatIntelService threatIntelService;
     @Autowired private RedisTemplate<String, Object> redis;
+    @Autowired private MeterRegistry meterRegistry;
 
     public void enrich(BaseEvent event) {
+        Timer.Sample sample = Timer.start(meterRegistry);
         if (event instanceof AuthenticationEvent authenticationEvent) {
             enrichGeoIp(authenticationEvent);
         }
@@ -45,6 +49,9 @@ public class EnrichmentService {
         }
 
         event.setEnriched(true);
+        sample.stop(Timer.builder("soc.enrichment.duration")
+                .tag("event_type", event.getClass().getSimpleName())
+                .register(meterRegistry));
         logEnrichmentResult(event);
     }
 

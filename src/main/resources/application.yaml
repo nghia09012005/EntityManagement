@@ -49,3 +49,22 @@ minio:
 
 virustotal:
   api-key: 3c89ae4118ce7b88be512ab34608bcbe4f81d845ee00829dd6889186e13e92b3
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true   # bật /actuator/health/liveness và /actuator/health/readiness
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}

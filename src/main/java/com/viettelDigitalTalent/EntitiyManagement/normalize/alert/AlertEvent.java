@@ -16,5 +16,7 @@ public class AlertEvent extends BaseEvent {
     // Các entity liên quan để thực hiện Correlation
     private String targetIp;
     private String targetUser;
+    private String targetHost;
+    private String targetDomain;
     private String targetFileHash;
 }

@@ -1,0 +1,6 @@
+{"eventType":"NETWORK","srcIp":"192.168.1.100","dstIp":"185.220.101.42","dstPort":4444,"dstDomain":"malware-c2.example.com"}
+{"eventType":"NETWORK","srcIp":"192.168.1.101","dstIp":"185.220.101.42","dstPort":443,"dstDomain":"malware-c2.example.com"}
+{"eventType":"NETWORK","srcIp":"192.168.1.100","dstIp":"203.0.113.55","dstPort":80,"dstDomain":"phishing.badsite.io"}
+{"eventType":"NETWORK","srcIp":"192.168.1.102","dstIp":"8.8.8.8","dstPort":53}
+{"eventType":"NETWORK","srcIp":"192.168.1.101","dstIp":"192.168.1.100","dstPort":445}
+{"eventType":"NETWORK","srcIp":"192.168.1.100","dstIp":"192.168.1.102","dstPort":22}

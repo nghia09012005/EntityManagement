@@ -25,6 +25,7 @@ public class AuditLogRepositoryImpl implements AuditLogRepository {
                 .set("category", category)
                 .set("timestamp", timestamp)
                 .set("rawData", rawData)
+                // isEnriched chỉ set false khi INSERT — nếu doc đã tồn tại (re-process) không ghi đè
                 .setOnInsert("isEnriched", false);
 
         mongoTemplate.upsert(query, update, AuditLog.class);
@@ -37,6 +38,7 @@ public class AuditLogRepositoryImpl implements AuditLogRepository {
                 .set("enrichment", enrichment)
                 .set("isEnriched", true);
 
-        mongoTemplate.upsert(query, update, AuditLog.class);
+        // updateFirst (không upsert) — doc phải tồn tại trước (saveRawLog luôn chạy trước)
+        mongoTemplate.updateFirst(query, update, AuditLog.class);
     }
 }

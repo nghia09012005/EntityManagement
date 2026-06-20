@@ -39,7 +39,6 @@ public class FileIngestionService {
     }
 
     public FileIngestionResponse ingestFile(String fileName) throws Exception {
-        String source = resolveSource(fileName);
         int readLines = 0;
         int queuedMessages = 0;
 
@@ -48,38 +47,13 @@ public class FileIngestionService {
 
             String line;
             while ((line = bufferedReader.readLine()) != null) {
-                if (line.isBlank()) {
-                    continue;
-                }
-
-                kafkaTemplate.send("raw-logs", source, line);
+                if (line.isBlank()) continue;
+                kafkaTemplate.send("raw-logs", line);  // no key — worker tự detect từ content
                 readLines++;
                 queuedMessages++;
             }
         }
 
-        return new FileIngestionResponse(fileName, source, readLines, queuedMessages);
-    }
-
-    private String resolveSource(String fileName) {
-        String normalizedFileName = fileName.toLowerCase();
-
-        if (normalizedFileName.contains("windows") || normalizedFileName.contains("auth") || normalizedFileName.contains("login")) {
-            return "windows";
-        }
-
-        if (normalizedFileName.contains("process") || normalizedFileName.contains("proc")) {
-            return "process";
-        }
-
-        if (normalizedFileName.contains("alert") || normalizedFileName.contains("threat")) {
-            return "alert";
-        }
-
-        if (normalizedFileName.contains("network") || normalizedFileName.contains("net") || normalizedFileName.contains("conn")) {
-            return "network";
-        }
-
-        throw new IllegalArgumentException("Cannot resolve source from fileName: " + fileName);
+        return new FileIngestionResponse(fileName, "auto", readLines, queuedMessages);
     }
 }
