@@ -39,17 +39,18 @@ export default function EntityDetailPage() {
   const navigate = useNavigate()
   const [graph, setGraph]     = useState(null)
   const [loading, setLoading] = useState(true)
+  const [hops, setHops]       = useState(1)
 
   const label = LABEL_MAP[type] || type
   const decoded = decodeURIComponent(value)
 
   useEffect(() => {
     setLoading(true)
-    getNeighbors(type, decoded, 1)
+    getNeighbors(type, decoded, hops)
       .then(setGraph)
       .catch(() => setGraph(null))
       .finally(() => setLoading(false))
-  }, [type, decoded])
+  }, [type, decoded, hops])
 
   // Find source node from graph data
   const sourceNode = graph?.nodes?.find(n => {
@@ -78,7 +79,27 @@ export default function EntityDetailPage() {
         <EntityBadge label={label} />
         <span className="mono">{decoded}</span>
       </div>
-      <div className="page-sub">Entity detail · 1-hop graph</div>
+      <div className="page-sub" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span>Entity detail</span>
+        <span style={{ color: '#2d3748' }}>·</span>
+        <span style={{ fontSize: 12, color: '#718096' }}>Hops</span>
+        {[1, 2, 3, 5].map(h => (
+          <button
+            key={h}
+            onClick={() => setHops(h)}
+            style={{
+              padding: '2px 10px', borderRadius: 5, fontSize: 12, cursor: 'pointer',
+              border: '1px solid',
+              borderColor: hops === h ? '#63b3ed' : '#2d3748',
+              background:  hops === h ? '#2b4a7a' : '#1a1d2e',
+              color:       hops === h ? '#bee3f8' : '#718096',
+            }}
+          >
+            {h}-hop
+          </button>
+        ))}
+        {loading && <span style={{ fontSize: 12, color: '#63b3ed' }}>Loading…</span>}
+      </div>
 
       {loading ? (
         <div className="loading">Đang tải…</div>

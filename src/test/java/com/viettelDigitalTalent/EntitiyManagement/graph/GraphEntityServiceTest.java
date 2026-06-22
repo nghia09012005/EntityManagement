@@ -11,6 +11,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Answers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.springframework.data.neo4j.core.Neo4jClient;
 
 import java.time.LocalDateTime;
@@ -28,7 +29,7 @@ class GraphEntityServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new GraphEntityService(neo4jClient);
+        service = new GraphEntityService(neo4jClient, new SimpleMeterRegistry());
     }
 
     // ── AuthenticationEvent ──────────────────────────────────────────────────
@@ -142,6 +143,15 @@ class GraphEntityServiceTest {
     }
 
     @Test
+    void saveNetwork_skipsWhenDstIpNull() {
+        NetworkEvent event = new NetworkEvent();
+        event.setSrcIp("10.0.0.1");
+        // no dstIp
+        service.save(event);
+        verify(neo4jClient, never()).query(anyString());
+    }
+
+    @Test
     void saveNetwork_withDomainCreatesResolvesToRelation() {
         NetworkEvent event = new NetworkEvent();
         event.setSrcIp("10.0.0.1");
@@ -224,5 +234,62 @@ class GraphEntityServiceTest {
 
         // should not propagate exception
         service.save(event);
+    }
+
+    @Test
+    void saveAuth_withEventIdPropagated() {
+        AuthenticationEvent event = new AuthenticationEvent();
+        event.setEventId("uuid-test-001");
+        event.setUsername("bob");
+        event.setWorkstation("LAP-01");
+        event.setTimestamp(LocalDateTime.now());
+        service.save(event);
+        verify(neo4jClient, atLeastOnce()).query(anyString());
+    }
+
+    @Test
+    void saveAlert_skipsAlertedFromWhenMissingIp() {
+        AlertEvent event = new AlertEvent();
+        event.setAlertName("Test Alert");
+        event.setSeverity("LOW");
+        event.setTargetUser("admin");
+        // no targetIp → ALERTED_FROM should NOT be created, no other relations either
+        event.setTimestamp(LocalDateTime.now());
+        service.save(event);
+        verify(neo4jClient, never()).query(anyString());
+    }
+
+    @Test
+    void saveAlert_withHostAndNoIpCreatesOnlyHostMerge() {
+        AlertEvent event = new AlertEvent();
+        event.setAlertName("Test");
+        event.setSeverity("MEDIUM");
+        event.setTargetHost("WIN-DC01");
+        // no targetIp → only Host MERGE, no TARGETED_AT
+        event.setTimestamp(LocalDateTime.now());
+        service.save(event);
+        verify(neo4jClient, times(1)).query(anyString());
+    }
+
+    @Test
+    void saveAlert_withDomainAndIpCreatesTwoQueries() {
+        AlertEvent event = new AlertEvent();
+        event.setAlertName("Domain Beacon");
+        event.setSeverity("HIGH");
+        event.setTargetDomain("evil.com");
+        event.setTargetIp("1.2.3.4");
+        event.setTimestamp(LocalDateTime.now());
+        service.save(event);
+        // Domain MERGE + RESOLVES_TO = 2 queries
+        verify(neo4jClient, times(2)).query(anyString());
+    }
+
+    @Test
+    void saveProcess_withNullTimestampUsesNow() {
+        ProcessEvent event = new ProcessEvent();
+        event.setFileHash("abc123");
+        event.setTimestamp(null); // should default to now
+        service.save(event);
+        verify(neo4jClient, atLeastOnce()).query(anyString());
     }
 }

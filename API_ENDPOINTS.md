@@ -77,13 +77,15 @@ curl -X POST http://localhost:8080/api/files/upload \
 
 ### GET `/api/graph/{label}/{value}/neighbors`
 
-Lấy các node và quan hệ lân cận của một entity (1 hoặc 2 hop).
+Lấy các node và quan hệ lân cận của một entity (multi-hop).
 
 | Param | Loại | Bắt buộc | Giá trị hợp lệ | Mô tả |
 |---|---|---|---|---|
 | `label` | path | ✅ | `user` \| `host` \| `ip` \| `domain` \| `filehash` | Loại entity |
 | `value` | path | ✅ | e.g. `admin`, `192.168.1.1` | Giá trị định danh |
-| `hops` | query | ❌ | `1` \| `2` (default: `1`) | Độ sâu truy vấn |
+| `hops` | query | ❌ | `1`–`5` (default: `1`) | Độ sâu truy vấn |
+
+> **Giới hạn row trả về:** 1-hop = 200, 2-hop = 500, 3-5 hop = 1 000 (tránh Cartesian explosion trên graph lớn).
 
 | label | Trường định danh | Ví dụ |
 |---|---|---|
@@ -95,7 +97,7 @@ Lấy các node và quan hệ lân cận của một entity (1 hoặc 2 hop).
 
 **Request:**
 ```
-GET /api/graph/user/admin/neighbors?hops=2
+GET /api/graph/user/admin/neighbors?hops=3
 ```
 
 **Response:** `200 OK`
@@ -107,10 +109,55 @@ GET /api/graph/user/admin/neighbors?hops=2
     { "id": "IP:1.2.3.4",   "label": "IP",   "properties": { "address": "1.2.3.4", "country": "Vietnam", "asn": "AS7552" } }
   ],
   "edges": [
-    { "from": "User:admin", "to": "Host:WIN-PC01", "type": "LOGGED_IN_TO",      "properties": { "firstSeen": "2026-06-18T10:00:00", "lastSeen": "2026-06-18T12:00:00", "count": 5 } },
-    { "from": "IP:1.2.3.4", "to": "Host:WIN-PC01", "type": "AUTHENTICATED_TO", "properties": { "firstSeen": "2026-06-18T10:00:00", "lastSeen": "2026-06-18T10:00:00", "count": 1 } }
+    { "from": "User:admin", "to": "Host:WIN-PC01", "type": "LOGGED_IN_TO",      "properties": { "firstSeen": "2026-06-18T10:00:00", "lastSeen": "2026-06-18T12:00:00", "count": 5, "firstEventId": "uuid-a", "lastEventId": "uuid-b" } },
+    { "from": "IP:1.2.3.4", "to": "Host:WIN-PC01", "type": "AUTHENTICATED_TO", "properties": { "firstSeen": "2026-06-18T10:00:00", "lastSeen": "2026-06-18T10:00:00", "count": 1, "firstEventId": "uuid-c", "lastEventId": "uuid-c" } }
   ]
 }
+```
+
+---
+
+### GET `/api/graph/path`
+
+Tìm đường đi ngắn nhất (hoặc tất cả đường ngắn nhất) giữa 2 entity bất kỳ trong graph.
+
+| Param | Loại | Bắt buộc | Giá trị hợp lệ | Mô tả |
+|---|---|---|---|---|
+| `fromType` | query | ✅ | `user` \| `host` \| `ip` \| `domain` \| `filehash` | Loại entity nguồn |
+| `fromValue` | query | ✅ | string | Giá trị entity nguồn |
+| `toType` | query | ✅ | `user` \| `host` \| `ip` \| `domain` \| `filehash` | Loại entity đích |
+| `toValue` | query | ✅ | string | Giá trị entity đích |
+| `maxHops` | query | ❌ | `1`–`10` (default: `6`) | Số hop tối đa cho phép |
+| `mode` | query | ❌ | `shortest` \| `all` (default: `shortest`) | `shortest` = 1 path ngắn nhất; `all` = tất cả path cùng độ dài ngắn nhất |
+
+**Request:**
+```
+GET /api/graph/path?fromType=user&fromValue=admin&toType=domain&toValue=evil.com&maxHops=6&mode=all
+```
+
+**Response `found = true`:** `200 OK`
+```json
+{
+  "nodes": [
+    { "id": "User:admin",       "label": "User",   "properties": { "username": "admin" } },
+    { "id": "Host:WIN-PC01",    "label": "Host",   "properties": { "hostname": "WIN-PC01" } },
+    { "id": "IP:1.2.3.4",      "label": "IP",     "properties": { "address": "1.2.3.4" } },
+    { "id": "Domain:evil.com",  "label": "Domain", "properties": { "name": "evil.com" } }
+  ],
+  "edges": [
+    { "from": "User:admin",    "to": "Host:WIN-PC01",   "type": "LOGGED_IN_TO",   "properties": { "count": 5 } },
+    { "from": "IP:1.2.3.4",   "to": "Host:WIN-PC01",   "type": "AUTHENTICATED_TO","properties": { "count": 1 } },
+    { "from": "IP:1.2.3.4",   "to": "Domain:evil.com", "type": "RESOLVES_TO",    "properties": { "count": 2 } }
+  ],
+  "found": true,
+  "pathCount": 2,
+  "shortestLength": 3
+}
+```
+
+**Response `found = false`:** `200 OK`
+```json
+{ "nodes": [], "edges": [], "found": false, "pathCount": 0, "shortestLength": 0 }
 ```
 
 ---
@@ -154,13 +201,15 @@ hoặc `none` nếu không có provider nào được cấu hình.
 
 ## Relationship Types (Neo4j)
 
+Mỗi relationship có thêm `firstEventId` và `lastEventId` — UUID trỏ tới document tương ứng trong MongoDB collection `audit_logs` (traceability Neo4j → MongoDB).
+
 | Quan hệ | Từ | Đến | Nguồn event | Properties |
 |---|---|---|---|---|
-| `LOGGED_IN_TO` | User | Host | AuthenticationEvent | firstSeen, lastSeen, count |
-| `AUTHENTICATED_TO` | IP | Host | AuthenticationEvent | firstSeen, lastSeen, count |
-| `EXECUTED_ON` | FileHash | Host | ProcessEvent | firstSeen, lastSeen, count, processName |
-| `CONNECTED_TO` | IP | IP | NetworkEvent | firstSeen, lastSeen, count, dstPort |
-| `RESOLVES_TO` | IP | Domain | NetworkEvent | firstSeen, lastSeen, count |
-| `ALERTED_FROM` | User | IP | AlertEvent | firstSeen, lastSeen, count, alertName, severity |
-| `DETECTED_ON` | FileHash | IP | AlertEvent | firstSeen, lastSeen, count |
-| `TARGETED_AT` | IP | Host | AlertEvent | firstSeen, lastSeen, count |
+| `LOGGED_IN_TO` | User | Host | AuthenticationEvent | firstSeen, lastSeen, count, firstEventId, lastEventId |
+| `AUTHENTICATED_TO` | IP | Host | AuthenticationEvent | firstSeen, lastSeen, count, firstEventId, lastEventId |
+| `EXECUTED_ON` | FileHash | Host | ProcessEvent | firstSeen, lastSeen, count, processName, firstEventId, lastEventId |
+| `CONNECTED_TO` | IP | IP | NetworkEvent | firstSeen, lastSeen, count, dstPort, firstEventId, lastEventId |
+| `RESOLVES_TO` | IP | Domain | NetworkEvent | firstSeen, lastSeen, count, firstEventId, lastEventId |
+| `ALERTED_FROM` | User | IP | AlertEvent | firstSeen, lastSeen, count, alertName, severity, firstEventId, lastEventId |
+| `DETECTED_ON` | FileHash | IP | AlertEvent | firstSeen, lastSeen, count, firstEventId, lastEventId |
+| `TARGETED_AT` | IP | Host | AlertEvent | firstSeen, lastSeen, count, firstEventId, lastEventId |

@@ -2,12 +2,15 @@ package com.viettelDigitalTalent.EntitiyManagement.enrichment;
 
 import com.viettelDigitalTalent.EntitiyManagement.enrichment.core.EnrichmentService;
 import com.viettelDigitalTalent.EntitiyManagement.enrichment.dtos.GeoInfo;
+import com.viettelDigitalTalent.EntitiyManagement.enrichment.dtos.IpIntelInfo;
 import com.viettelDigitalTalent.EntitiyManagement.enrichment.dtos.MalwareInfo;
 import com.viettelDigitalTalent.EntitiyManagement.enrichment.geoip.GeoIpService;
+import com.viettelDigitalTalent.EntitiyManagement.enrichment.ipintel.IpIntelligenceService;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.alert.AlertEvent;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.event.AuthenticationEvent;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.event.NetworkEvent;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.event.ProcessEvent;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,6 +30,7 @@ class EnrichmentServiceTest {
     private EnrichmentService enrichmentService;
 
     @Mock private GeoIpService geoIpService;
+    @Mock private IpIntelligenceService ipIntelligenceService;
     @Mock private RedisTemplate<String, Object> redis;
     @Mock private ValueOperations<String, Object> valueOps;
 
@@ -34,8 +38,11 @@ class EnrichmentServiceTest {
     void setUp() {
         enrichmentService = new EnrichmentService();
         ReflectionTestUtils.setField(enrichmentService, "geoIpService", geoIpService);
+        ReflectionTestUtils.setField(enrichmentService, "ipIntelligenceService", ipIntelligenceService);
         ReflectionTestUtils.setField(enrichmentService, "redis", redis);
+        ReflectionTestUtils.setField(enrichmentService, "meterRegistry", new SimpleMeterRegistry());
         lenient().when(redis.opsForValue()).thenReturn(valueOps);
+        lenient().when(ipIntelligenceService.enrich(anyString())).thenReturn(null);
     }
 
     @Test
@@ -131,5 +138,79 @@ class EnrichmentServiceTest {
 
         assertThat(event.isEnriched()).isTrue();
         assertThat(event.getRawData()).containsKey("geo");
+    }
+
+    @Test
+    void enrichAuthEventSetsIpIntelWhenReturned() {
+        IpIntelInfo intel = new IpIntelInfo();
+        intel.setThreatLevel("HIGH");
+        intel.setMalicious(true);
+        when(valueOps.get(anyString())).thenReturn(null);
+        when(geoIpService.lookup("10.0.0.1")).thenReturn(null);
+        when(ipIntelligenceService.enrich("10.0.0.1")).thenReturn(intel);
+
+        AuthenticationEvent event = new AuthenticationEvent();
+        event.setIpAddress("10.0.0.1");
+        enrichmentService.enrich(event);
+
+        assertThat(event.getRawData()).containsKey("ipIntel");
+        IpIntelInfo result = (IpIntelInfo) event.getRawData().get("ipIntel");
+        assertThat(result.getThreatLevel()).isEqualTo("HIGH");
+    }
+
+    @Test
+    void enrichNetworkEventSkipsWhenBothIpsNull() {
+        NetworkEvent event = new NetworkEvent();
+        enrichmentService.enrich(event);
+        assertThat(event.isEnriched()).isTrue();
+        assertThat(event.getRawData()).isEmpty();
+        verifyNoInteractions(geoIpService);
+    }
+
+    @Test
+    void enrichAlertEventSkipsGeoWhenTargetIpNull() {
+        AlertEvent event = new AlertEvent();
+        // no targetIp
+        enrichmentService.enrich(event);
+        assertThat(event.isEnriched()).isTrue();
+        verifyNoInteractions(geoIpService);
+    }
+
+    @Test
+    void enrichAlertEventWithFileHash() {
+        when(valueOps.get(anyString())).thenReturn(null);
+        when(geoIpService.lookup(anyString())).thenReturn(null);
+
+        AlertEvent event = new AlertEvent();
+        event.setTargetIp("1.2.3.4");
+        event.setTargetFileHash("abc123");
+        enrichmentService.enrich(event);
+
+        assertThat(event.getRawData()).containsKey("malware");
+        MalwareInfo mal = (MalwareInfo) event.getRawData().get("malware");
+        assertThat(mal.getVerdict()).isEqualTo("UNKNOWN");
+    }
+
+    @Test
+    void enrichProcessEventSkipsWhenHashNullAndNoRawHash() {
+        ProcessEvent event = new ProcessEvent();
+        // no fileHash, no rawData hash
+        enrichmentService.enrich(event);
+        assertThat(event.isEnriched()).isTrue();
+        assertThat(event.getRawData()).doesNotContainKey("malware");
+    }
+
+    @Test
+    void enrichAuthUsesGeoCache() {
+        GeoInfo cached = new GeoInfo();
+        cached.setCountry("US");
+        when(valueOps.get("ip:1.2.3.4")).thenReturn(cached);
+
+        AuthenticationEvent event = new AuthenticationEvent();
+        event.setIpAddress("1.2.3.4");
+        enrichmentService.enrich(event);
+
+        verify(geoIpService, never()).lookup(anyString());
+        assertThat(event.getRawData().get("geo")).isEqualTo(cached);
     }
 }

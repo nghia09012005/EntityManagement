@@ -37,8 +37,9 @@ src/
 │   ├── GraphView.jsx            # Visualization chính (vis-network)
 │   └── UploadPanel.jsx          # Upload file log
 └── pages/
-    ├── EntityListPage.jsx       # Trang chủ — danh sách entity theo tab
-    └── EntityDetailPage.jsx     # Chi tiết entity + graph 1-hop
+    ├── EntityListPage.jsx       # / — danh sách entity theo tab
+    ├── EntityDetailPage.jsx     # /entity/:type/:value — chi tiết + graph multi-hop
+    └── PathFinderPage.jsx       # /paths — tìm đường đi giữa 2 entity
 ```
 
 ---
@@ -56,8 +57,14 @@ Mỗi tab gọi `GET /api/graph/entities/{type}` và hiển thị bảng entity 
 
 ### Entity Detail (`/entity/:type/:value`)
 - Thông tin cơ bản + enrichment data (GeoIP, malware verdict, IP intel)
-- Bảng quan hệ 1-hop (relationship type, firstSeen, lastSeen, count)
+- Bảng quan hệ với first/last seen, count
+- Bộ chọn hop: **1 / 2 / 3 / 5-hop** — load lại graph khi đổi
 - Graph visualization tương tác (xem bên dưới)
+
+### Path Finder (`/paths`)
+- Chọn entity nguồn (type + value) và entity đích
+- Tuỳ chọn **Max hops** (2 / 3 / 4 / 6 / 8) và **Mode** (Shortest / All shortest)
+- Kết quả hiển thị trong GraphView kèm thống kê: số path, độ dài ngắn nhất, số node/edge
 
 ---
 
@@ -82,11 +89,49 @@ Component `GraphView` dùng **vis-network** với các tính năng:
 
 ## API endpoints dùng trong frontend
 
+### File
+
 | Method | Endpoint | Mô tả |
 |--------|----------|-------|
-| `POST` | `/api/files/upload` | Upload file log (multipart) |
-| `GET`  | `/api/graph/entities/{type}` | Danh sách entity theo loại |
-| `GET`  | `/api/graph/{label}/{value}/neighbors?hops=1` | Subgraph 1-hop quanh entity |
+| `POST` | `/api/files/upload` | Upload file log (multipart/form-data, field `file`) |
+
+### Graph — Entity
+
+| Method | Endpoint | Params | Mô tả |
+|--------|----------|--------|-------|
+| `GET` | `/api/graph/entities/{type}` | `type`: user \| host \| ip \| domain \| filehash | Liệt kê tất cả entity theo loại |
+| `GET` | `/api/graph/{label}/{value}/neighbors` | `hops` 1–5 (default 1) | Subgraph N-hop quanh entity. Limit: 1-hop=200, 2-hop=500, 3-5 hop=1000 rows |
+
+### Graph — Path Finding
+
+| Method | Endpoint | Params | Mô tả |
+|--------|----------|--------|-------|
+| `GET` | `/api/graph/path` | xem bên dưới | Tìm đường đi giữa 2 entity |
+
+**Params của `/api/graph/path`:**
+
+| Param | Bắt buộc | Giá trị | Mô tả |
+|-------|----------|---------|-------|
+| `fromType` | ✓ | user \| host \| ip \| domain \| filehash | Loại entity nguồn |
+| `fromValue` | ✓ | string | Giá trị entity nguồn (vd: `admin`, `192.168.1.1`) |
+| `toType` | ✓ | user \| host \| ip \| domain \| filehash | Loại entity đích |
+| `toValue` | ✓ | string | Giá trị entity đích |
+| `maxHops` | | 1–10 (default 6) | Số hop tối đa cho phép |
+| `mode` | | `shortest` \| `all` (default `shortest`) | `shortest` = 1 path ngắn nhất; `all` = tất cả path có cùng độ dài ngắn nhất |
+
+**Response (`PathResponse`):**
+
+```json
+{
+  "nodes": [ { "id": "User:admin", "label": "User", "properties": { "username": "admin" } } ],
+  "edges": [ { "from": "User:admin", "to": "Host:DC01", "type": "LOGGED_IN_TO", "properties": {} } ],
+  "found": true,
+  "pathCount": 2,
+  "shortestLength": 3
+}
+```
+
+Trả `found: false` khi không có đường đi trong `maxHops` hop.
 
 ---
 
