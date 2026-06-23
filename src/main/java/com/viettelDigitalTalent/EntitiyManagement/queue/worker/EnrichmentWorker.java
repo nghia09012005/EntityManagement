@@ -1,0 +1,60 @@
+package com.viettelDigitalTalent.EntitiyManagement.queue.worker;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.viettelDigitalTalent.EntitiyManagement.enrichment.core.EnrichmentService;
+import com.viettelDigitalTalent.EntitiyManagement.normalize.base.BaseEvent;
+import com.viettelDigitalTalent.EntitiyManagement.queue.config.KafkaTopicConstants;
+import com.viettelDigitalTalent.EntitiyManagement.queue.publisher.DeadLetterPublisher;
+import com.viettelDigitalTalent.EntitiyManagement.storage.repository.AuditLogRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.stereotype.Service;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class EnrichmentWorker {
+
+    private final EnrichmentService enrichmentService;
+    private final AuditLogRepository auditLogRepository;
+    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final ObjectMapper objectMapper;
+    private final DeadLetterPublisher deadLetterPublisher;
+
+    private static final String[] ENRICHMENT_KEYS = {
+        "geo", "malware", "srcGeo", "dstGeo", "ipIntel", "srcIpIntel", "dstIpIntel"
+    };
+
+    @KafkaListener(topics = KafkaTopicConstants.NORMALIZED_EVENTS, groupId = "soc-enrichment-group")
+    public void consume(String payload) {
+        try {
+            BaseEvent event = objectMapper.readValue(payload, BaseEvent.class);
+            String eventId = event.getEventId();
+
+            log.info("[EnrichmentWorker] Enriching event ID: {}", eventId);
+            enrichmentService.enrich(event);
+
+            Map<String, Object> enrichmentData = new HashMap<>();
+            for (String key : ENRICHMENT_KEYS) {
+                if (event.getRawData().containsKey(key)) {
+                    enrichmentData.put(key, event.getRawData().get(key));
+                }
+            }
+            auditLogRepository.updateEnrichment(eventId, enrichmentData);
+            log.info("[EnrichmentWorker] Enrichment done cho ID: {}", eventId);
+
+            String enrichedPayload = objectMapper.writeValueAsString(event);
+            kafkaTemplate.send(KafkaTopicConstants.ENRICHED_EVENTS, enrichedPayload);
+            log.info("[EnrichmentWorker] Published enriched event ID: {}", eventId);
+
+        } catch (Exception e) {
+            log.error("[EnrichmentWorker] Lỗi enrich event: {}", e.getMessage(), e);
+            deadLetterPublisher.publish(KafkaTopicConstants.NORMALIZED_EVENTS, payload, e);
+        }
+    }
+}

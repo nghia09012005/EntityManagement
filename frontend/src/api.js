@@ -10,6 +10,16 @@ export const ENTITY_LABELS = {
   filehash: 'FileHash',
 }
 
+export const ingestLog = (rawText) =>
+  fetch(`${BASE_URL}/api/v1/ingest`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: rawText,
+  }).then(r => {
+    if (!r.ok) throw new Error(`HTTP ${r.status}`)
+    return r.text()
+  })
+
 export const uploadLogFile = (file) => {
   const form = new FormData()
   form.append('file', file)

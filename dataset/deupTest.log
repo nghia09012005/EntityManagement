@@ -1,0 +1,6 @@
+{"eventType":"AUTHENTICATION","username":"jdoe","ipAddress":"192.168.1.10","success":true,"workstation":"WIN-PC01","timestamp":"2026-06-23T10:00:00Z"}
+{"eventType":"AUTHENTICATION","username":"jdoe@company.com","ipAddress":"192.168.1.11","success":true,"workstation":"WIN-PC01.corp.local","timestamp":"2026-06-23T10:01:00Z"}
+{"eventType":"AUTHENTICATION","username":"alice","ipAddress":"192.168.1.20","success":false,"workstation":"SRV-WEB01","timestamp":"2026-06-23T10:02:00Z"}
+{"eventType":"AUTHENTICATION","username":"alice@company.com","ipAddress":"192.168.1.21","success":true,"workstation":"SRV-WEB01.company.local","timestamp":"2026-06-23T10:03:00Z"}
+{"eventType":"AUTHENTICATION","username":"bob","ipAddress":"192.168.1.30","success":true,"workstation":"WIN-DC01","timestamp":"2026-06-23T10:04:00Z"}
+{"eventType":"AUTHENTICATION","username":"bob@company.com","ipAddress":"192.168.1.31","success":true,"workstation":"WIN-DC01.domain.local","timestamp":"2026-06-23T10:05:00Z"}

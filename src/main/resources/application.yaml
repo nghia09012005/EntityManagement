@@ -10,10 +10,15 @@ spring:
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
 
     consumer:
-      group-id: soc-parser-group
+      group-id: soc-parser-group        # default group (ParserWorker)
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+    # Topic names — referenced via KafkaTopicConstants
+    # soc-enrichment-group: normalized-events consumer (EnrichmentWorker)
+    # soc-graph-group:      enriched-events consumer  (GraphWorker)
+    # dead-letter-queue:    failed events from any worker
 
   data:
     redis:
@@ -62,6 +67,10 @@ abuseipdb:
    api-key: 318a6b99b99071359489f94e7517f1c9beb824171ec18ed6ce531a7a51cb018f5e6b7c7ed1402c75  # https://www.abuseipdb.com/account/api
 otx:
    api-key: 1e6c8e740611e066be69e03b6982fc6ac4d2be3e71ca019397ab9012d6d54f9d         # https://otx.alienvault.com/api
+
+soc:
+  dedup:
+    interval-ms: 1200   # chạy SAME_AS deduplication mỗi 2 phút
 
 management:
   endpoints:

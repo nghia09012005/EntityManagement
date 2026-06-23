@@ -29,7 +29,7 @@ class GraphEntityServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new GraphEntityService(neo4jClient, new SimpleMeterRegistry());
+        service = new GraphEntityService(neo4jClient, new SimpleMeterRegistry(), new com.fasterxml.jackson.databind.ObjectMapper());
     }
 
     // ── AuthenticationEvent ──────────────────────────────────────────────────
