@@ -1,0 +1,58 @@
+stages:
+  - test
+
+variables:
+  MAVEN_OPTS: >-
+    -Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository
+    -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=WARN
+  MAVEN_CLI_OPTS: "--batch-mode --no-transfer-progress --errors"
+
+cache:
+  key: "maven-$CI_COMMIT_REF_SLUG"
+  paths:
+    - .m2/repository/
+  policy: pull-push
+
+test:
+  stage: test
+  image: maven:3.9-eclipse-temurin-21
+  script:
+    - mvn $MAVEN_CLI_OPTS verify
+    - |
+      awk -F',' '
+        NR==1 { next }
+        { im += $4; ic += $5; bm += $6; bc += $7; lm += $8; lc += $9 }
+        END {
+          printf "Instruction : %.1f%% (%d/%d)\n", 100*ic/(ic+im), ic, ic+im
+          printf "Branch      : %.1f%% (%d/%d)\n", 100*bc/(bc+bm), bc, bc+bm
+          printf "Line        : %.1f%% (%d/%d)\n", 100*lc/(lc+lm), lc, lc+lm
+          printf "Total Coverage: %.1f%%\n", 100*ic/(ic+im)
+        }
+      ' target/site/jacoco/jacoco.csv
+  coverage: '/Total Coverage: \d+\.\d+%/'
+  artifacts:
+    when: always
+    reports:
+      junit: target/surefire-reports/TEST-*.xml
+    paths:
+      - target/site/jacoco/
+    expire_in: 14 days
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+pages:
+  stage: test
+  image: busybox
+  needs:
+    - job: test
+      artifacts: true
+  script:
+    - mkdir -p public
+    - cp -r target/site/jacoco/* public/
+  artifacts:
+    paths:
+      - public/
+    expire_in: 30 days
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'

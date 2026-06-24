@@ -9,6 +9,7 @@ import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.Map;
 
 @Repository
@@ -40,5 +41,12 @@ public class AuditLogRepositoryImpl implements AuditLogRepository {
 
         // updateFirst (không upsert) — doc phải tồn tại trước (saveRawLog luôn chạy trước)
         mongoTemplate.updateFirst(query, update, AuditLog.class);
+    }
+
+    @Override
+    public Map<String, Object> findEnrichmentByEventId(String eventId) {
+        if (eventId == null || eventId.isBlank()) return Collections.emptyMap();
+        AuditLog log = mongoTemplate.findById(eventId, AuditLog.class);
+        return (log != null && log.getEnrichment() != null) ? log.getEnrichment() : Collections.emptyMap();
     }
 }

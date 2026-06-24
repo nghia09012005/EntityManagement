@@ -19,9 +19,9 @@ const ID_PROP = {
 const COLUMNS = {
   user:          ['username'],
   host:          ['hostname'],
-  ip:            ['address', 'country', 'asn', 'threatLevel'],
+  ip:            ['address'],
   domain:        ['name'],
-  filehash:      ['hash', 'verdict', 'malicious'],
+  filehash:      ['hash'],
   url:           ['url'],
   process:       ['name', 'path'],
   cloudresource: ['resourceId'],
@@ -88,11 +88,9 @@ export default function EntityListPage() {
                   <tr key={node.id}>
                     {cols.map(c => (
                       <td key={c}>
-                        {c === 'malicious'
-                          ? <span className={p[c] ? 'bad' : 'ok'}>{p[c] ? '⚠ Yes' : '✓ No'}</span>
-                          : c === 'hash'
-                            ? <span className="mono">{p[c]}</span>
-                            : String(p[c] ?? '—')
+                        {c === 'hash'
+                          ? <span className="mono">{p[c]}</span>
+                          : String(p[c] ?? '—')
                         }
                       </td>
                     ))}

@@ -15,6 +15,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.LocalDateTime;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -94,5 +95,55 @@ class AuditLogRepositoryImplTest {
         repo.updateEnrichment("event-A", Map.of("key1", "val1"));
         repo.updateEnrichment("event-B", Map.of("key2", "val2"));
         verify(mongoTemplate, times(2)).updateFirst(any(), any(), eq(AuditLog.class));
+    }
+
+    // ── findEnrichmentByEventId ───────────────────────────────────────────────
+
+    @Test
+    void findEnrichmentByEventId_returnsEmptyMapWhenNull() {
+        Map<String, Object> result = repo.findEnrichmentByEventId(null);
+        assertThat(result).isEmpty();
+        verifyNoInteractions(mongoTemplate);
+    }
+
+    @Test
+    void findEnrichmentByEventId_returnsEmptyMapWhenBlank() {
+        Map<String, Object> result = repo.findEnrichmentByEventId("   ");
+        assertThat(result).isEmpty();
+        verifyNoInteractions(mongoTemplate);
+    }
+
+    @Test
+    void findEnrichmentByEventId_returnsEnrichmentWhenFound() {
+        AuditLog log = new AuditLog();
+        log.setEventId("evt-1");
+        Map<String, Object> enrichment = Map.of("geo", Map.of("country", "US"));
+        log.setEnrichment(enrichment);
+        when(mongoTemplate.findById("evt-1", AuditLog.class)).thenReturn(log);
+
+        Map<String, Object> result = repo.findEnrichmentByEventId("evt-1");
+
+        assertThat(result).containsKey("geo");
+    }
+
+    @Test
+    void findEnrichmentByEventId_returnsEmptyMapWhenNotFound() {
+        when(mongoTemplate.findById("missing", AuditLog.class)).thenReturn(null);
+
+        Map<String, Object> result = repo.findEnrichmentByEventId("missing");
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void findEnrichmentByEventId_returnsEmptyMapWhenEnrichmentFieldNull() {
+        AuditLog log = new AuditLog();
+        log.setEventId("evt-2");
+        log.setEnrichment(null);
+        when(mongoTemplate.findById("evt-2", AuditLog.class)).thenReturn(log);
+
+        Map<String, Object> result = repo.findEnrichmentByEventId("evt-2");
+
+        assertThat(result).isEmpty();
     }
 }

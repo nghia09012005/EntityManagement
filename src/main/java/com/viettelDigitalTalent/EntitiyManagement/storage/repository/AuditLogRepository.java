@@ -6,4 +6,5 @@ import java.util.Map;
 public interface AuditLogRepository {
     void saveRawLog(String eventId, String source, String category, LocalDateTime timestamp, Map<String, Object> rawData);
     void updateEnrichment(String eventId, Map<String, Object> enrichment);
+    Map<String, Object> findEnrichmentByEventId(String eventId);
 }

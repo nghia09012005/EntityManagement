@@ -33,27 +33,26 @@ Nền tảng SOC thu thập log từ nhiều nguồn, chuẩn hóa, làm giàu d
                        │ publish
                        ▼
            Kafka: normalized-events
-                       │
-                       ▼
-  ┌────────────────────────────────────────────────────┐
-  │  EnrichmentWorker  (soc-enrichment-group)          │
-  │                                                    │
-  │  IP     → GeoIP + AbuseIPDB + OTX AlienVault       │
-  │  Hash   → VirusTotal                               │
-  │  lỗi   → Kafka: dead-letter-queue                 │
-  └────────────────────┬───────────────────────────────┘
-                       │ publish
-                       ▼
-            Kafka: enriched-events
-                       │
-                       ▼
-  ┌────────────────────────────────────────────────────┐
-  │  GraphWorker  (soc-graph-group)                    │
-  │                                                    │
-  │  GraphEntityService → MERGE entities into Neo4j    │
-  │  EntityNormalizer  → chuẩn hóa trước khi MERGE    │
-  │  lỗi → Kafka: dead-letter-queue                   │
-  └────────────────────────────────────────────────────┘
+                  ┌────┴────┐
+                  ▼         ▼
+  ┌─────────────────┐   ┌──────────────────────────────────┐
+  │ EnrichmentWorker│   │ GraphWorker  (soc-graph-group)   │
+  │ (soc-enrich..)  │   │                                  │
+  │ IP  → GeoIP +   │   │ GraphEntityService → MERGE       │
+  │      AbuseIPDB  │   │   entities + relationships       │
+  │      + OTX      │   │   vào Neo4j (chỉ identity,       │
+  │ Hash → VT       │   │   KHÔNG lưu enrichment fields)   │
+  │                 │   │ lỗi → dead-letter-queue          │
+  │ → lưu enrichment│   └──────────────────────────────────┘
+  │   vào MongoDB   │
+  │   (audit_logs)  │
+  │ lỗi → DLQ      │
+  └─────────────────┘
+
+  UI muốn hiển thị enrichment của entity:
+    GET /api/enrichment/entity?type=ip&value=1.2.3.4
+    → query MongoDB audit_logs → trả về {geo, ipIntel, malware, ...}
+    (tách biệt: Neo4j = graph topology, MongoDB = enrichment data)
 
   Background job (mỗi ~2 phút):
   GraphDeduplicationService → SAME_AS links + MongoDB: graph_dedup_log
@@ -63,29 +62,30 @@ Nền tảng SOC thu thập log từ nhiều nguồn, chuẩn hóa, làm giàu d
 
 ## Kafka Topics
 
-| Topic               | Producer          | Consumer              |
-|---------------------|-------------------|-----------------------|
-| `raw-logs`          | Ingestion API     | ParserWorker          |
-| `normalized-events` | ParserWorker      | EnrichmentWorker      |
-| `enriched-events`   | EnrichmentWorker  | GraphWorker           |
-| `dead-letter-queue` | bất kỳ worker nào | (xử lý thủ công/retry)|
+| Topic               | Producer          | Consumer                          |
+|---------------------|-------------------|-----------------------------------|
+| `raw-logs`          | Ingestion API     | ParserWorker                      |
+| `normalized-events` | ParserWorker      | EnrichmentWorker + **GraphWorker** |
+| `dead-letter-queue` | bất kỳ worker nào | DlqWorker → MongoDB `dlq_events`  |
 
 ---
 
 ## Entity Types & Properties
 
-| Label           | ID Property    | Properties khác                                         |
+| Label           | ID Property    | Properties khác (trong Neo4j)                           |
 |-----------------|----------------|---------------------------------------------------------|
 | `User`          | `username`     | —                                                       |
 | `Host`          | `hostname`     | —                                                       |
-| `IP`            | `address`      | `country`, `city`, `asn`, `abuseScore`, `threatLevel`, `isMalicious` |
+| `IP`            | `address`      | — *(enrichment lấy từ MongoDB)*                         |
 | `Domain`        | `name`         | —                                                       |
-| `FileHash`      | `hash`         | `verdict`, `malicious`, `family`                        |
+| `FileHash`      | `hash`         | — *(enrichment lấy từ MongoDB)*                         |
 | `Url`           | `url`          | —                                                       |
 | `Process`       | `name`         | `path`, `commandLine`                                   |
 | `CloudResource` | `resourceId`   | —                                                       |
 | `Email`         | `address`      | —                                                       |
-| `Cve`           | `cveId`        | `cvssScore`, `severity`                                 |
+| `Cve`           | `cveId`        | —                                                       |
+
+> **Enrichment data** (country, ASN, abuseScore, threatLevel, verdict, family…) được lưu riêng trong MongoDB collection `audit_logs` (field `enrichment`). UI query qua `GET /api/enrichment/entity?type=ip&value=...` thay vì đọc từ Neo4j node properties.
 
 ### Normalization (EntityNormalizer)
 
@@ -137,7 +137,6 @@ Tất cả relationship đều có: `firstSeen`, `lastSeen`, `count`, `firstEven
 | `fqdn_shortname`  | `WIN-PC01` ↔ `WIN-PC01.corp.local`            | 80%        |
 
 Mỗi link mới được ghi vào MongoDB collection `graph_dedup_log`.
-
 ---
 
 ## Parsers
@@ -350,6 +349,20 @@ GET /api/graph/{type}/{value}/neighbors?hops=2
 
 # Attack path
 GET /api/graph/path?fromType=user&fromValue=nghia&toType=ip&toValue=185.220.101.42&maxHops=4
+```
+
+### Enrichment Query (MongoDB)
+
+```bash
+# Lấy enrichment data của một entity từ audit_logs
+GET /api/enrichment/entity?type=ip&value=185.220.101.42
+GET /api/enrichment/entity?type=filehash&value=abc123def456...
+
+# Response ví dụ (IP):
+# {
+#   "geo":    { "country": "DE", "city": "Frankfurt", "asn": "AS396356" },
+#   "ipIntel":{ "abuseScore": 92, "threatLevel": "CRITICAL", "malicious": true }
+# }
 ```
 
 ---

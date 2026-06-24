@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    name: Test & Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+          cache: maven
+
+      - name: Run tests + coverage check
+        run: mvn verify --batch-mode --no-transfer-progress
+        # mvn verify chạy: compile → test → JaCoCo report → JaCoCo check (≥ 80%)
+        # Build fail nếu coverage < 80% (cấu hình trong pom.xml)
+
+      - name: Print coverage summary
+        if: always()
+        run: |
+          echo "### Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          awk -F',' '
+            NR==1 { next }
+            {
+              im += $4; ic += $5
+              bm += $6; bc += $7
+              lm += $8; lc += $9
+            }
+            END {
+              printf "| Metric | Covered | Total | %% |\n"
+              printf "|---|---|---|---|\n"
+              printf "| Instruction | %d | %d | **%.1f%%** |\n", ic, ic+im, 100*ic/(ic+im)
+              printf "| Branch      | %d | %d | **%.1f%%** |\n", bc, bc+bm, 100*bc/(bc+bm)
+              printf "| Line        | %d | %d | **%.1f%%** |\n", lc, lc+lm, 100*lc/(lc+lm)
+            }
+          ' target/site/jacoco/jacoco.csv >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload JaCoCo HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: target/site/jacoco/
+          retention-days: 14

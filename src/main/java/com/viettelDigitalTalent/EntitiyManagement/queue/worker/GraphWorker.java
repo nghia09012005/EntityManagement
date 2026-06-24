@@ -19,7 +19,7 @@ public class GraphWorker {
     private final ObjectMapper objectMapper;
     private final DeadLetterPublisher deadLetterPublisher;
 
-    @KafkaListener(topics = KafkaTopicConstants.ENRICHED_EVENTS, groupId = "soc-graph-group")
+    @KafkaListener(topics = KafkaTopicConstants.NORMALIZED_EVENTS, groupId = "soc-graph-group")
     public void consume(String payload) {
         try {
             BaseEvent event = objectMapper.readValue(payload, BaseEvent.class);
@@ -28,7 +28,7 @@ public class GraphWorker {
             log.info("[GraphWorker] Graph entities saved for event ID: {}", event.getEventId());
         } catch (Exception e) {
             log.error("[GraphWorker] Lỗi lưu graph cho event: {}", e.getMessage(), e);
-            deadLetterPublisher.publish(KafkaTopicConstants.ENRICHED_EVENTS, payload, e);
+            deadLetterPublisher.publish(KafkaTopicConstants.NORMALIZED_EVENTS, payload, e);
         }
     }
 }

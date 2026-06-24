@@ -9,7 +9,6 @@ import com.viettelDigitalTalent.EntitiyManagement.storage.repository.AuditLogRep
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -22,7 +21,6 @@ public class EnrichmentWorker {
 
     private final EnrichmentService enrichmentService;
     private final AuditLogRepository auditLogRepository;
-    private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
     private final DeadLetterPublisher deadLetterPublisher;
 
@@ -47,10 +45,6 @@ public class EnrichmentWorker {
             }
             auditLogRepository.updateEnrichment(eventId, enrichmentData);
             log.info("[EnrichmentWorker] Enrichment done cho ID: {}", eventId);
-
-            String enrichedPayload = objectMapper.writeValueAsString(event);
-            kafkaTemplate.send(KafkaTopicConstants.ENRICHED_EVENTS, enrichedPayload);
-            log.info("[EnrichmentWorker] Published enriched event ID: {}", eventId);
 
             // test DLQ
 //            throw new RuntimeException("Intentional test exception");

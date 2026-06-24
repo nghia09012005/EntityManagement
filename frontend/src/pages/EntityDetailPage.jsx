@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getNeighbors } from '../api'
+import { getNeighbors, fetchEnrichmentByEventId } from '../api'
 import EntityBadge from '../components/EntityBadge'
 import GraphView from '../components/GraphView'
 
@@ -18,19 +18,27 @@ const ID_PROP = {
   email: 'address', cve: 'cveId',
 }
 
-const ENRICHMENT_KEYS = new Set([
-  // IP
-  'country', 'city', 'asn',
-  'abuseScore', 'threatLevel', 'isMalicious',
-  // FileHash
-  'verdict', 'malicious', 'family',
-  // CVE
-  'cvssScore',
-  // CloudResource
-  'provider', 'resourceType', 'region',
-  // Process
-  'path', 'commandLine',
-])
+/** Flatten MongoDB enrichment map into display key-value pairs. */
+function flattenEnrichment(type, raw) {
+  if (!raw || Object.keys(raw).length === 0) return []
+  const result = {}
+  if (type === 'ip') {
+    const geo   = raw.geo   || raw.srcGeo   || raw.dstGeo   || {}
+    const intel = raw.ipIntel || raw.srcIpIntel || raw.dstIpIntel || {}
+    if (geo.country)     result.country     = geo.country
+    if (geo.city)        result.city        = geo.city
+    if (geo.asn)         result.asn         = geo.asn
+    if (intel.abuseScore  != null) result.abuseScore  = intel.abuseScore
+    if (intel.threatLevel != null) result.threatLevel = intel.threatLevel
+    if (intel.malicious   != null) result.isMalicious = intel.malicious
+  } else if (type === 'filehash') {
+    const mal = raw.malware || {}
+    if (mal.verdict   != null) result.verdict   = mal.verdict
+    if (mal.malicious != null) result.malicious = mal.malicious
+    if (mal.family)            result.family    = mal.family
+  }
+  return Object.entries(result)
+}
 
 const THREAT_COLORS = {
   CRITICAL: { bg: '#4a1a1a', color: '#fc8181', border: '#742a2a' },
@@ -134,9 +142,10 @@ function EdgeDetails({ edge }) {
 export default function EntityDetailPage() {
   const { type, value } = useParams()
   const navigate = useNavigate()
-  const [graph, setGraph]     = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [hops, setHops]       = useState(1)
+  const [graph, setGraph]         = useState(null)
+  const [loading, setLoading]     = useState(true)
+  const [hops, setHops]           = useState(1)
+  const [enrichment, setEnrichment] = useState({})
 
   const label   = LABEL_MAP[type] || type
   const decoded = decodeURIComponent(value)
@@ -149,11 +158,21 @@ export default function EntityDetailPage() {
       .finally(() => setLoading(false))
   }, [type, decoded, hops])
 
+  useEffect(() => {
+    if (type !== 'ip' && type !== 'filehash') { setEnrichment({}); return }
+    if (!graph?.edges?.length) return
+    const eventId = graph.edges
+      .map(e => e.properties?.lastEventId)
+      .find(id => !!id)
+    if (!eventId) return
+    fetchEnrichmentByEventId(eventId).then(setEnrichment).catch(() => setEnrichment({}))
+  }, [type, graph])
+
   const sourceNode = graph?.nodes?.find(n => n.properties[ID_PROP[type]] === decoded)
   const props = sourceNode?.properties || {}
 
-  const baseProps   = Object.entries(props).filter(([k]) => !ENRICHMENT_KEYS.has(k))
-  const enrichProps = Object.entries(props).filter(([k]) =>  ENRICHMENT_KEYS.has(k))
+  const baseProps   = Object.entries(props)
+  const enrichProps = flattenEnrichment(type, enrichment)
 
   const neighbors = graph?.edges?.map(e => {
     const isOut      = e.from === sourceNode?.id

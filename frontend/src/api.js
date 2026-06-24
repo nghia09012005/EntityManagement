@@ -50,3 +50,8 @@ export const fetchDlqEvents = (page = 0, size = 20) =>
 
 export const fetchDlqSummary = () =>
   fetch(`${BASE_URL}/api/dlq/summary`).then(r => r.json())
+
+export const fetchEnrichmentByEventId = (eventId) =>
+  fetch(`${BASE_URL}/api/enrichment/event/${encodeURIComponent(eventId)}`)
+    .then(r => r.json())
+    .catch(() => ({}))
