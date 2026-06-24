@@ -16,20 +16,30 @@ public class GraphQueryService {
 
     private final Neo4jClient neo4jClient;
 
-    public static final Map<String, String> LABEL_MAP = Map.of(
-        "user",     "User",
-        "host",     "Host",
-        "ip",       "IP",
-        "domain",   "Domain",
-        "filehash", "FileHash"
+    public static final Map<String, String> LABEL_MAP = Map.ofEntries(
+        Map.entry("user",          "User"),
+        Map.entry("host",          "Host"),
+        Map.entry("ip",            "IP"),
+        Map.entry("domain",        "Domain"),
+        Map.entry("filehash",      "FileHash"),
+        Map.entry("url",           "Url"),
+        Map.entry("process",       "Process"),
+        Map.entry("cloudresource", "CloudResource"),
+        Map.entry("email",         "Email"),
+        Map.entry("cve",           "Cve")
     );
 
-    public static final Map<String, String> ID_PROP = Map.of(
-        "User",     "username",
-        "Host",     "hostname",
-        "IP",       "address",
-        "Domain",   "name",
-        "FileHash", "hash"
+    public static final Map<String, String> ID_PROP = Map.ofEntries(
+        Map.entry("User",          "username"),
+        Map.entry("Host",          "hostname"),
+        Map.entry("IP",            "address"),
+        Map.entry("Domain",        "name"),
+        Map.entry("FileHash",      "hash"),
+        Map.entry("Url",           "url"),
+        Map.entry("Process",       "name"),
+        Map.entry("CloudResource", "resourceId"),
+        Map.entry("Email",         "address"),
+        Map.entry("Cve",           "cveId")
     );
 
     /** Trả về null nếu key không hợp lệ — controller dùng để trả 400. */

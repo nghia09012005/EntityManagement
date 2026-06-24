@@ -25,28 +25,38 @@ public class GraphEntityService {
 
     private final Neo4jClient neo4jClient;
     private final ObjectMapper objectMapper;
+    private final DedupSignal dedupSignal;
     private final Counter authCounter;
     private final Counter processCounter;
     private final Counter networkCounter;
     private final Counter alertCounter;
 
-    public GraphEntityService(Neo4jClient neo4jClient, MeterRegistry meterRegistry, ObjectMapper objectMapper) {
+    public GraphEntityService(Neo4jClient neo4jClient, MeterRegistry meterRegistry,
+                              ObjectMapper objectMapper, DedupSignal dedupSignal) {
         this.neo4jClient  = neo4jClient;
         this.objectMapper = objectMapper;
+        this.dedupSignal  = dedupSignal;
         this.authCounter    = Counter.builder("soc.entity.saved").tag("event_type", "AUTHENTICATION").register(meterRegistry);
         this.processCounter = Counter.builder("soc.entity.saved").tag("event_type", "PROCESS").register(meterRegistry);
         this.networkCounter = Counter.builder("soc.entity.saved").tag("event_type", "NETWORK").register(meterRegistry);
         this.alertCounter   = Counter.builder("soc.entity.saved").tag("event_type", "ALERT").register(meterRegistry);
     }
 
+    private static final String REL_UPSERT = """
+            ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1,
+                          r.firstEventId = $eventId, r.lastEventId = $eventId
+            ON MATCH SET  r.lastSeen = $now, r.count = r.count + 1,
+                          r.lastEventId = $eventId
+            """;
+
     public void save(BaseEvent event) {
         try {
             LocalDateTime now = event.getTimestamp() != null ? event.getTimestamp() : LocalDateTime.now();
             String eid = event.getEventId();
-            if (event instanceof AuthenticationEvent auth) { saveAuth(auth, now, eid);    authCounter.increment(); }
-            else if (event instanceof ProcessEvent proc)   { saveProcess(proc, now, eid); processCounter.increment(); }
-            else if (event instanceof NetworkEvent net)    { saveNetwork(net, now, eid);  networkCounter.increment(); }
-            else if (event instanceof AlertEvent alert)    { saveAlert(alert, now, eid);  alertCounter.increment(); }
+            if (event instanceof AuthenticationEvent auth) { saveAuth(auth, now, eid);    authCounter.increment();    dedupSignal.mark(); }
+            else if (event instanceof ProcessEvent proc)   { saveProcess(proc, now, eid); processCounter.increment(); dedupSignal.mark(); }
+            else if (event instanceof NetworkEvent net)    { saveNetwork(net, now, eid);  networkCounter.increment(); dedupSignal.mark(); }
+            else if (event instanceof AlertEvent alert)    { saveAlert(alert, now, eid);  alertCounter.increment();   dedupSignal.mark(); }
         } catch (Exception e) {
             log.error("[Graph] Lỗi khi lưu entity cho event {}: {}", event.getEventId(), e.getMessage(), e);
         }
@@ -149,6 +159,31 @@ public class GraphEntityService {
                 ON MATCH SET  f.verdict = $verdict, f.malicious = $malicious, f.family = $family
                 """).bindAll(p).run();
 
+        String procName = EntityNormalizer.processName(e.getProcessName());
+        if (procName != null) {
+            Map<String, Object> pp = new HashMap<>();
+            pp.put("name",        procName);
+            pp.put("path",        e.getProcessPath());
+            pp.put("commandLine", e.getCommandLine());
+            pp.put("now",         now.toString());
+            pp.put("eventId",     eventId);
+            neo4jClient.query("""
+                    MERGE (proc:Process {name: $name})
+                    ON CREATE SET proc.path = $path, proc.commandLine = $commandLine
+                    ON MATCH SET  proc.path = coalesce($path, proc.path),
+                                  proc.commandLine = coalesce($commandLine, proc.commandLine)
+                    """).bindAll(pp).run();
+
+            if (hash != null) {
+                pp.put("hash", hash);
+                neo4jClient.query("""
+                        MATCH (f:FileHash {hash: $hash})
+                        MATCH (proc:Process {name: $name})
+                        MERGE (f)-[r:HASH_OF]->(proc)
+                        """ + REL_UPSERT).bindAll(pp).run();
+            }
+        }
+
         Object rawHostname = e.getRawData().get("hostname");
         if (rawHostname instanceof String raw) {
             String hostname = EntityNormalizer.hostname(raw);
@@ -166,6 +201,19 @@ public class GraphEntityService {
                         ON MATCH SET  r.lastSeen = $now, r.count = r.count + 1,
                                       r.lastEventId = $eventId
                         """).bindAll(p).run();
+
+                if (procName != null) {
+                    Map<String, Object> ph = new HashMap<>();
+                    ph.put("name",     procName);
+                    ph.put("hostname", hostname);
+                    ph.put("now",      now.toString());
+                    ph.put("eventId",  eventId);
+                    neo4jClient.query("""
+                            MATCH (proc:Process {name: $name})
+                            MERGE (h:Host {hostname: $hostname})
+                            MERGE (proc)-[r:EXECUTED_ON]->(h)
+                            """ + REL_UPSERT).bindAll(ph).run();
+                }
             }
         }
     }
@@ -359,6 +407,102 @@ public class GraphEntityService {
                         ON MATCH SET  r.lastSeen = $now, r.count = r.count + 1,
                                       r.lastEventId = $eventId
                         """).bindAll(p).run();
+            }
+        }
+
+        // ── URL ──
+        String targetUrl = EntityNormalizer.url(e.getTargetUrl());
+        if (targetUrl != null) {
+            Map<String, Object> p = new HashMap<>();
+            p.put("url",     targetUrl);
+            p.put("now",     now.toString());
+            p.put("eventId", eventId);
+            neo4jClient.query("MERGE (:Url {url: $url})").bindAll(p).run();
+
+            if (targetIp != null) {
+                p.put("address", targetIp);
+                neo4jClient.query("""
+                        MATCH (ip:IP {address: $address})
+                        MERGE (u:Url {url: $url})
+                        MERGE (ip)-[r:ACCESSED]->(u)
+                        """ + REL_UPSERT).bindAll(p).run();
+            }
+        }
+
+        // ── Process ──
+        String targetProcess = EntityNormalizer.processName(e.getTargetProcess());
+        if (targetProcess != null) {
+            Map<String, Object> p = new HashMap<>();
+            p.put("name",    targetProcess);
+            p.put("now",     now.toString());
+            p.put("eventId", eventId);
+            neo4jClient.query("MERGE (:Process {name: $name})").bindAll(p).run();
+
+            if (targetHost != null) {
+                p.put("hostname", targetHost);
+                neo4jClient.query("""
+                        MATCH (proc:Process {name: $name})
+                        MERGE (h:Host {hostname: $hostname})
+                        MERGE (proc)-[r:EXECUTED_ON]->(h)
+                        """ + REL_UPSERT).bindAll(p).run();
+            }
+        }
+
+        // ── CloudResource ──
+        String targetCloudResourceId = e.getTargetCloudResourceId();
+        if (targetCloudResourceId != null && !targetCloudResourceId.isBlank()) {
+            targetCloudResourceId = targetCloudResourceId.trim();
+            Map<String, Object> p = new HashMap<>();
+            p.put("resourceId", targetCloudResourceId);
+            p.put("now",        now.toString());
+            p.put("eventId",    eventId);
+            neo4jClient.query("MERGE (:CloudResource {resourceId: $resourceId})").bindAll(p).run();
+
+            if (targetUser != null) {
+                p.put("username", targetUser);
+                neo4jClient.query("""
+                        MATCH (u:User {username: $username})
+                        MERGE (cr:CloudResource {resourceId: $resourceId})
+                        MERGE (u)-[r:ACCESSED]->(cr)
+                        """ + REL_UPSERT).bindAll(p).run();
+            }
+        }
+
+        // ── Email ──
+        String targetEmail = EntityNormalizer.email(e.getTargetEmail());
+        if (targetEmail != null) {
+            Map<String, Object> p = new HashMap<>();
+            p.put("address", targetEmail);
+            p.put("now",     now.toString());
+            p.put("eventId", eventId);
+            neo4jClient.query("MERGE (:Email {address: $address})").bindAll(p).run();
+
+            if (targetUser != null) {
+                p.put("username", targetUser);
+                neo4jClient.query("""
+                        MATCH (u:User {username: $username})
+                        MERGE (em:Email {address: $address})
+                        MERGE (u)-[r:HAS_EMAIL]->(em)
+                        """ + REL_UPSERT).bindAll(p).run();
+            }
+        }
+
+        // ── CVE ──
+        String targetCve = EntityNormalizer.cveId(e.getTargetCve());
+        if (targetCve != null) {
+            Map<String, Object> p = new HashMap<>();
+            p.put("cveId",   targetCve);
+            p.put("now",     now.toString());
+            p.put("eventId", eventId);
+            neo4jClient.query("MERGE (:Cve {cveId: $cveId})").bindAll(p).run();
+
+            if (targetHost != null) {
+                p.put("hostname", targetHost);
+                neo4jClient.query("""
+                        MATCH (cve:Cve {cveId: $cveId})
+                        MERGE (h:Host {hostname: $hostname})
+                        MERGE (cve)-[r:AFFECTS]->(h)
+                        """ + REL_UPSERT).bindAll(p).run();
             }
         }
     }

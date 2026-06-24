@@ -19,4 +19,11 @@ public class AlertEvent extends BaseEvent {
     private String targetHost;
     private String targetDomain;
     private String targetFileHash;
+
+    // Extended entity targets
+    private String targetUrl;
+    private String targetProcess;
+    private String targetCloudResourceId;
+    private String targetEmail;
+    private String targetCve;
 }

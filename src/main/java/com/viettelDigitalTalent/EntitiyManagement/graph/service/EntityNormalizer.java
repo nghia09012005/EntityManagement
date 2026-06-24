@@ -45,4 +45,36 @@ public final class EntityNormalizer {
         if (d.endsWith(".")) d = d.substring(0, d.length() - 1);
         return d.isBlank() ? null : d;
     }
+
+    /** "HTTP://Example.com/path/" → "http://example.com/path", strips trailing slash */
+    public static String url(String raw) {
+        if (raw == null) return null;
+        String u = raw.trim().toLowerCase();
+        if (u.endsWith("/")) u = u.substring(0, u.length() - 1);
+        return u.isBlank() ? null : u;
+    }
+
+    /** "User@Company.COM" → "user@company.com" */
+    public static String email(String raw) {
+        if (raw == null) return null;
+        String e = raw.trim().toLowerCase();
+        return e.isBlank() ? null : e;
+    }
+
+    /** "cve-2023-1234" → "CVE-2023-1234", uppercase canonical form */
+    public static String cveId(String raw) {
+        if (raw == null) return null;
+        String c = raw.trim().toUpperCase();
+        return c.isBlank() ? null : c;
+    }
+
+    /** "C:\\Windows\\System32\\cmd.exe" → "cmd.exe" (basename), lowercase */
+    public static String processName(String raw) {
+        if (raw == null) return null;
+        String p = raw.trim();
+        int sep = Math.max(p.lastIndexOf('\\'), p.lastIndexOf('/'));
+        if (sep >= 0) p = p.substring(sep + 1);
+        p = p.toLowerCase();
+        return p.isBlank() ? null : p;
+    }
 }

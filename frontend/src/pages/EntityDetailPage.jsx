@@ -7,17 +7,29 @@ import GraphView from '../components/GraphView'
 const LABEL_MAP = {
   user: 'User', host: 'Host', ip: 'IP',
   domain: 'Domain', filehash: 'FileHash',
+  url: 'Url', process: 'Process', cloudresource: 'CloudResource',
+  email: 'Email', cve: 'Cve',
 }
 
 const ID_PROP = {
   user: 'username', host: 'hostname', ip: 'address',
   domain: 'name', filehash: 'hash',
+  url: 'url', process: 'name', cloudresource: 'resourceId',
+  email: 'address', cve: 'cveId',
 }
 
 const ENRICHMENT_KEYS = new Set([
+  // IP
   'country', 'city', 'asn',
   'abuseScore', 'threatLevel', 'isMalicious',
+  // FileHash
   'verdict', 'malicious', 'family',
+  // CVE
+  'cvssScore',
+  // CloudResource
+  'provider', 'resourceType', 'region',
+  // Process
+  'path', 'commandLine',
 ])
 
 const THREAT_COLORS = {
@@ -219,7 +231,7 @@ export default function EntityDetailPage() {
                   {sameAsLinks.map((item, i) => {
                     const np   = item.node?.properties || {}
                     const nLabel = item.node?.label
-                    const nVal = np.username || np.hostname || np.address || np.name || np.hash || '—'
+                    const nVal = np.username || np.hostname || np.address || np.name || np.hash || np.url || np.resourceId || np.cveId || '—'
                     const nType = nLabel?.toLowerCase()
                     const p = item.edge.properties || {}
                     return (
@@ -265,7 +277,7 @@ export default function EntityDetailPage() {
                   {normalLinks.map((item, i) => {
                     const np    = item.node?.properties || {}
                     const nLabel = item.node?.label
-                    const nVal  = np.username || np.hostname || np.address || np.name || np.hash || '—'
+                    const nVal  = np.username || np.hostname || np.address || np.name || np.hash || np.url || np.resourceId || np.cveId || '—'
                     const nType = nLabel?.toLowerCase()
                     return (
                       <tr key={i}>

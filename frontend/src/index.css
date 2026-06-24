@@ -55,11 +55,16 @@ a { color: inherit; text-decoration: none; }
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
-.badge-user     { background: #1a472a; color: #68d391; }
-.badge-host     { background: #1a365d; color: #63b3ed; }
-.badge-ip       { background: #7b341e; color: #fbd38d; }
-.badge-domain   { background: #44337a; color: #d6bcfa; }
-.badge-filehash { background: #742a2a; color: #fc8181; }
+.badge-user          { background: #1a472a; color: #68d391; }
+.badge-host          { background: #1a365d; color: #63b3ed; }
+.badge-ip            { background: #7b341e; color: #fbd38d; }
+.badge-domain        { background: #44337a; color: #d6bcfa; }
+.badge-filehash      { background: #742a2a; color: #fc8181; }
+.badge-url           { background: #1a3a2e; color: #48bb78; }
+.badge-process       { background: #2d2050; color: #b794f4; }
+.badge-cloudresource { background: #0e2d3a; color: #76e4f7; }
+.badge-email         { background: #3a2910; color: #f6ad55; }
+.badge-cve           { background: #3a1a20; color: #fc8181; }
 
 /* Card */
 .card {

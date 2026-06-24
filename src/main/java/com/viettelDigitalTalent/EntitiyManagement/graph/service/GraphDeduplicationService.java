@@ -9,7 +9,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -20,18 +22,27 @@ public class GraphDeduplicationService {
 
     private final Neo4jClient neo4jClient;
     private final GraphDedupLogRepository dedupLogRepository;
+    private final DedupSignal dedupSignal;
 
     @Scheduled(fixedDelayString = "${soc.dedup.interval-ms:120000}")
     public void runDeduplication() {
+        if (!dedupSignal.getAndReset()) {
+            log.info("No new entity -> terminate cron deup job");
+            return;
+        }
+
         LocalDateTime now = LocalDateTime.now();
-        int users = deduplicateUsers(now);
-        int hosts = deduplicateHosts(now);
-        if (users + hosts > 0) {
-            log.info("[Dedup] Created {} SAME_AS links: {} users, {} hosts", users + hosts, users, hosts);
+        List<GraphDedupLog> logs = new ArrayList<>();
+        logs.addAll(deduplicateUsers(now));
+        logs.addAll(deduplicateHosts(now));
+
+        if (!logs.isEmpty()) {
+            dedupLogRepository.saveAll(logs);
+            log.info("[Dedup] Created {} SAME_AS links", logs.size());
         }
     }
 
-    private int deduplicateUsers(LocalDateTime now) {
+    private List<GraphDedupLog> deduplicateUsers(LocalDateTime now) {
         String nowStr = now.toString();
         Collection<Map<String, Object>> created = neo4jClient.query("""
                 MATCH (u2:User)
@@ -49,7 +60,8 @@ public class GraphDeduplicationService {
                 .bind(nowStr).to("now")
                 .fetch().all();
 
-        created.forEach(row -> dedupLogRepository.save(GraphDedupLog.builder()
+        List<GraphDedupLog> logs = new ArrayList<>();
+        created.forEach(row -> logs.add(GraphDedupLog.builder()
                 .id(UUID.randomUUID().toString())
                 .fromNode("User:" + row.get("fromVal"))
                 .toNode("User:" + row.get("toVal"))
@@ -57,11 +69,10 @@ public class GraphDeduplicationService {
                 .confidence(0.85)
                 .detectedAt(now)
                 .build()));
-
-        return created.size();
+        return logs;
     }
 
-    private int deduplicateHosts(LocalDateTime now) {
+    private List<GraphDedupLog> deduplicateHosts(LocalDateTime now) {
         String nowStr = now.toString();
         Collection<Map<String, Object>> created = neo4jClient.query("""
                 MATCH (h2:Host)
@@ -79,7 +90,8 @@ public class GraphDeduplicationService {
                 .bind(nowStr).to("now")
                 .fetch().all();
 
-        created.forEach(row -> dedupLogRepository.save(GraphDedupLog.builder()
+        List<GraphDedupLog> logs = new ArrayList<>();
+        created.forEach(row -> logs.add(GraphDedupLog.builder()
                 .id(UUID.randomUUID().toString())
                 .fromNode("Host:" + row.get("fromVal"))
                 .toNode("Host:" + row.get("toVal"))
@@ -87,7 +99,6 @@ public class GraphDeduplicationService {
                 .confidence(0.80)
                 .detectedAt(now)
                 .build()));
-
-        return created.size();
+        return logs;
     }
 }

@@ -1,554 +1,405 @@
-# SOC (Security Operations Center) Platform
+# SOC Entity Management
 
-Hệ thống SOC chuyên dụng cho việc thu thập, phân tích, phát hiện và phản ứng với các mối đe dọa bảo mật theo thời gian thực.
+Nền tảng SOC thu thập log từ nhiều nguồn, chuẩn hóa, làm giàu dữ liệu qua pipeline Kafka, và lưu thành **entity graph** trong Neo4j để phân tích quan hệ tấn công.
 
-Kiến trúc được thiết kế theo mô hình:
-
-- Pipeline-based Architecture
-- Event-driven Processing
-- Management Plane
-- Real-time Detection
+**Tech stack:** Java 21 · Spring Boot 3.5 · React + Vite · Kafka · MongoDB · Neo4j · Redis · MinIO
 
 ---
 
-# 📌 Features
+## Kiến trúc hệ thống
 
-- Real-time log ingestion
-- Multi-source log parsing
-- Event normalization
-- Threat intelligence enrichment
-- Rule-based detection engine
-- Runtime rule management
-- Graph-based attack analysis
-- Kafka streaming pipeline
-- RESTful management APIs
-- JWT authentication & RBAC
-- Multi-database architecture
+```
+  Browser / API Client
+         │
+         │  POST /api/v1/ingest   (text/plain — free text)
+         │  POST /api/files/upload (multipart — log file)
+         ▼
+  ┌─────────────────┐
+  │  Ingestion API  │  → lưu raw log vào MongoDB (audit_logs)
+  └────────┬────────┘
+           │ publish
+           ▼
+   Kafka: raw-logs
+           │
+           ▼
+  ┌────────────────────────────────────────────────────┐
+  │  ParserWorker  (soc-parser-group)                  │
+  │                                                    │
+  │  JSON structured  →  detect format → parse         │
+  │  Free text        →  LLM (Gemini → Groq → Mock)   │
+  │                       → parse → normalize          │
+  │  lỗi → Kafka: dead-letter-queue                   │
+  └────────────────────┬───────────────────────────────┘
+                       │ publish
+                       ▼
+           Kafka: normalized-events
+                       │
+                       ▼
+  ┌────────────────────────────────────────────────────┐
+  │  EnrichmentWorker  (soc-enrichment-group)          │
+  │                                                    │
+  │  IP     → GeoIP + AbuseIPDB + OTX AlienVault       │
+  │  Hash   → VirusTotal                               │
+  │  lỗi   → Kafka: dead-letter-queue                 │
+  └────────────────────┬───────────────────────────────┘
+                       │ publish
+                       ▼
+            Kafka: enriched-events
+                       │
+                       ▼
+  ┌────────────────────────────────────────────────────┐
+  │  GraphWorker  (soc-graph-group)                    │
+  │                                                    │
+  │  GraphEntityService → MERGE entities into Neo4j    │
+  │  EntityNormalizer  → chuẩn hóa trước khi MERGE    │
+  │  lỗi → Kafka: dead-letter-queue                   │
+  └────────────────────────────────────────────────────┘
+
+  Background job (mỗi ~2 phút):
+  GraphDeduplicationService → SAME_AS links + MongoDB: graph_dedup_log
+```
 
 ---
 
-# 🏗 System Architecture
+## Kafka Topics
 
-```text
-                        +------------------+
-                        |  Log Sources     |
-                        |------------------|
-                        | Windows          |
-                        | Linux            |
-                        | Firewall         |
-                        | Cloud Provider   |
-                        | Okta             |
-                        +--------+---------+
-                                 |
-                                 v
-                    +----------------------+
-                    |     Ingestion API    |
-                    +----------------------+
-                                 |
-                                 v
-                          +-------------+
-                          |    Kafka    |
-                          +-------------+
-                                 |
-        ------------------------------------------------
-        |                      |                       |
-        v                      v                       v
+| Topic               | Producer          | Consumer              |
+|---------------------|-------------------|-----------------------|
+| `raw-logs`          | Ingestion API     | ParserWorker          |
+| `normalized-events` | ParserWorker      | EnrichmentWorker      |
+| `enriched-events`   | EnrichmentWorker  | GraphWorker           |
+| `dead-letter-queue` | bất kỳ worker nào | (xử lý thủ công/retry)|
 
-+---------------+    +----------------+     +----------------+
-| Parser Worker | -> | Enrichment     | ->  | Detection      |
-|               |    | Worker         |     | Engine         |
-+---------------+    +----------------+     +----------------+
-                                                    |
-                                                    v
-                                           +----------------+
-                                           | Alert Engine   |
-                                           +----------------+
-                                                    |
-                     ---------------------------------------------------
-                     |                         |                       |
-                     v                         v                       v
+---
 
-              +-------------+         +-------------+         +-------------+
-              | PostgreSQL  |         | MongoDB    |         | Neo4j       |
-              | Alerts      |         | Raw Logs   |         | Graph       |
-              +-------------+         +-------------+         +-------------+
+## Entity Types & Properties
+
+| Label           | ID Property    | Properties khác                                         |
+|-----------------|----------------|---------------------------------------------------------|
+| `User`          | `username`     | —                                                       |
+| `Host`          | `hostname`     | —                                                       |
+| `IP`            | `address`      | `country`, `city`, `asn`, `abuseScore`, `threatLevel`, `isMalicious` |
+| `Domain`        | `name`         | —                                                       |
+| `FileHash`      | `hash`         | `verdict`, `malicious`, `family`                        |
+| `Url`           | `url`          | —                                                       |
+| `Process`       | `name`         | `path`, `commandLine`                                   |
+| `CloudResource` | `resourceId`   | —                                                       |
+| `Email`         | `address`      | —                                                       |
+| `Cve`           | `cveId`        | `cvssScore`, `severity`                                 |
+
+### Normalization (EntityNormalizer)
+
+| Loại      | Quy tắc                                                        |
+|-----------|----------------------------------------------------------------|
+| username  | lowercase; bỏ `DOMAIN\` prefix                                 |
+| ip        | bỏ `::ffff:` IPv4-mapped IPv6 prefix                           |
+| hash      | lowercase, trim                                                |
+| hostname  | lowercase, bỏ trailing `.`                                     |
+| domain    | lowercase, bỏ trailing `.`                                     |
+| url       | lowercase, bỏ trailing `/`                                     |
+| email     | lowercase, trim                                                |
+| cveId     | uppercase canonical (`CVE-YYYY-NNNNN`)                         |
+| processName | basename extraction (`C:\...\cmd.exe` → `cmd.exe`), lowercase |
+
+---
+
+## Relationships
+
+| Relationship       | From          | To              | Nguồn event                              |
+|--------------------|---------------|-----------------|------------------------------------------|
+| `LOGGED_IN_TO`     | User          | Host            | AuthenticationEvent                      |
+| `AUTHENTICATED_TO` | IP            | Host            | AuthenticationEvent (khi có IP)          |
+| `EXECUTED_ON`      | FileHash      | Host            | ProcessEvent                             |
+| `EXECUTED_ON`      | Process       | Host            | ProcessEvent / AlertEvent                |
+| `HASH_OF`          | FileHash      | Process         | ProcessEvent (khi có cả hash và name)    |
+| `CONNECTED_TO`     | IP            | IP              | NetworkEvent                             |
+| `RESOLVES_TO`      | IP            | Domain          | NetworkEvent / AlertEvent                |
+| `ALERTED_FROM`     | User          | IP              | AlertEvent                               |
+| `TARGETED_AT`      | IP            | Host            | AlertEvent                               |
+| `DETECTED_ON`      | FileHash      | IP              | AlertEvent                               |
+| `ACCESSED`         | IP            | Url             | AlertEvent                               |
+| `ACCESSED`         | User          | CloudResource   | AlertEvent                               |
+| `HAS_EMAIL`        | User          | Email           | AlertEvent                               |
+| `AFFECTS`          | Cve           | Host            | AlertEvent                               |
+| `SAME_AS`          | Node          | Node            | GraphDeduplicationService (background)   |
+
+Tất cả relationship đều có: `firstSeen`, `lastSeen`, `count`, `firstEventId`, `lastEventId`.
+
+---
+
+## Entity Deduplication (SAME_AS)
+
+`GraphDeduplicationService` chạy định kỳ (mặc định 2 phút), tạo `SAME_AS` link giữa các entity có thể là cùng một thực thể:
+
+| Rule              | Ví dụ                                         | Confidence |
+|-------------------|-----------------------------------------------|------------|
+| `email_prefix`    | `nghia` ↔ `nghia@company.vn`                  | 85%        |
+| `fqdn_shortname`  | `WIN-PC01` ↔ `WIN-PC01.corp.local`            | 80%        |
+
+Mỗi link mới được ghi vào MongoDB collection `graph_dedup_log`.
+
+---
+
+## Parsers
+
+| Parser               | EventType      | Input format                                    |
+|----------------------|----------------|-------------------------------------------------|
+| WindowsEventParser   | AUTHENTICATION | Windows Event Log JSON (event_id 4624/4625)     |
+| NetworkEventParser   | NETWORK        | Firewall / flow JSON                            |
+| ProcessEventParser   | PROCESS        | Sysmon / EDR process event JSON                 |
+| AlertEventParser     | ALERT          | Generic alert JSON                              |
+| LLM fallback         | bất kỳ         | Free text — Gemini → Groq → Mock (offline safe) |
+
+---
+
+## Enrichment Sources
+
+| Nguồn      | Đối tượng    | Dữ liệu thu được                            |
+|------------|--------------|---------------------------------------------|
+| GeoIP      | IP address   | country, city, ASN                          |
+| AbuseIPDB  | IP address   | abuseScore (0–100), isMalicious             |
+| OTX        | IP / Domain  | threatLevel (NONE/LOW/MEDIUM/HIGH/CRITICAL) |
+| VirusTotal | SHA-256 hash | verdict (MALICIOUS/CLEAN/UNKNOWN), family   |
+
+---
+
+## MongoDB Collections
+
+| Collection        | Nội dung                                             |
+|-------------------|------------------------------------------------------|
+| `audit_logs`      | Raw log gốc trước khi parse, lưu ngay khi nhận vào  |
+| `graph_dedup_log` | Log mỗi SAME_AS link mới được tạo bởi dedup job     |
+
+---
+
+## Project Structure
 
 ```
-# Project Structure
-```
-src/main/java/com/example/soc/
-├── SocApplication.java
+src/main/java/com/viettelDigitalTalent/EntitiyManagement/
+├── ingestion/              # Tiếp nhận log (REST API, file upload)
+│   ├── controller/
+│   ├── dto/
+│   └── service/
 │
-├── ingestion/              # Data Pipeline: Tiếp nhận log
-│   ├── controller/         # Endpoint nhận log (Webhook/Push)
-│   ├── dto/                # Request DTO cho log thô
-│   └── service/            # Logic chuyển log vào Queue
+├── queue/                  # Kafka pipeline
+│   ├── config/             # KafkaTopicConstants, KafkaTopicsConfig
+│   ├── publisher/          # DeadLetterPublisher
+│   └── worker/             # ParserWorker, EnrichmentWorker, GraphWorker
 │
-├── parser/                 # Data Pipeline: Parsing logs
-│   ├── core/               # Base Parser & Dispatcher
-│   ├── windows/            # Các parser cụ thể
-│   ├── linux/
-│   ├── cloudtrail/
-│   ├── suricata/
-│   └── okta/
+├── parser/                 # Chuẩn hóa log thô → BaseEvent
+│   ├── core/               # EventParser interface + dispatcher
+│   ├── windows/            # Windows Event Log parser
+│   ├── network/            # Network / firewall parser
+│   ├── process/            # Process / EDR parser
+│   └── alert/              # Generic alert parser
 │
-├── normalized/             # Data Models (POJOs)
-│   ├── base/               # Các class trừu tượng
-│   ├── event/              # Event types (Auth, Process, etc)
-│   └── alert/              # Alert types (Malware, Login, etc)
+├── normalize/              # Event data models
+│   ├── base/               # BaseEvent (@JsonTypeInfo polymorphism)
+│   ├── event/              # AuthenticationEvent, ProcessEvent, NetworkEvent
+│   └── alert/              # AlertEvent (10 target fields)
 │
-├── enrichment/             # Data Pipeline: Làm giàu dữ liệu
-│   ├── core/
-│   ├── geoip/
-│   ├── threatintel/
-│   ├── asset/
-│   └── identity/
+├── enrichment/             # Làm giàu dữ liệu
+│   ├── core/               # EnrichmentService dispatcher
+│   ├── geoip/              # GeoIP lookup (Redis cache)
+│   ├── ipintel/            # AbuseIPDB + OTX
+│   └── threatintel/        # VirusTotal
 │
-├── detection/              # Data Pipeline: Phát hiện mối đe dọa
-│   ├── engine/             # Engine chạy Rules
-│   ├── rules/              # Các class định nghĩa Rule
-│   └── model/              # Kết quả phát hiện
+├── graph/                  # Neo4j entity graph
+│   ├── controller/         # GraphController (REST API)
+│   ├── service/            # GraphEntityService, GraphQueryService
+│   │                       # GraphDeduplicationService, EntityNormalizer
+│   └── dto/                # NodeDto, EdgeDto, GraphResponse, PathResponse
 │
-├── management/             # MỚI: API CRUD (Quản lý hệ thống)
-│   ├── controller/         # API để CRUD Rules, Assets, Users
-│   ├── service/            # Business logic cho quản trị
-│   └── dto/                # Request/Response DTO cho API
+├── llm/                    # LLM fallback chain
+│   ├── core/               # LLM client interface + factory
+│   └── llmFilter/          # Gemini / Groq / Mock clients
 │
-├── graph/                  # Phân tích quan hệ (Neo4j)
-│   ├── entity/
-│   ├── relation/
-│   ├── mapper/
-│   └── repository/
+├── storage/
+│   ├── mongodb/            # AuditLog, GraphDedupLog documents
+│   └── repository/         # MongoRepository interfaces
 │
-├── storage/                # Truy cập dữ liệu (DB)
-│   ├── mongodb/            # Lưu Raw Logs
-│   ├── postgres/           # Lưu Alerts & Cấu hình (Rules, Assets)
-│   └── repository/         # Các interface Repository dùng chung
-│
-├── queue/                  # Message Broker (Kafka)
-│   ├── kafka/
-│   └── worker/             # Các worker xử lý theo luồng
-│
-├── security/               # MỚI: Bảo mật API (JWT, Auth)
-│   ├── config/
-│   ├── service/
-│   └── filter/
-│
-└── common/                 # Tiện ích dùng chung
-    ├── exception/
-    ├── util/
-```
+├── detection/              # Rule-based detection engine
+├── management/             # CRUD API (rules, assets)
+└── common/                 # Exception handling, utils
 
-# 🛡️ SIEM Platform — Architecture Documentation
-
-## ⚙️ Core Modules
-
-### 1. Ingestion Module
-
-Chịu trách nhiệm tiếp nhận log từ nhiều nguồn khác nhau.
-
-#### Responsibilities
-
-- REST API ingestion
-- Syslog receiver
-- Webhook ingestion
-- Validate raw payload
-- Push event vào Kafka
-
-#### Example Flow
-```
-Client -> /api/v1/logs -> Kafka Topic
-```
----
-
-### 2. Parser Module
-
-Chuẩn hóa dữ liệu log thành unified schema.
-
-#### Supported Parsers
-
-- Windows Event Parser
-- Linux Syslog Parser
-- Okta Parser
-- Firewall Parser
-- CloudTrail Parser
-
-#### Example
-
-**Raw Log:**
-
-```json
-{
-  "event_id": 4625,
-  "user": "admin",
-  "ip": "1.1.1.1"
-}
-```
-
-**Normalized Event:**
-
-```json
-{
-  "eventType": "AUTH_FAILURE",
-  "username": "admin",
-  "sourceIp": "1.1.1.1",
-  "provider": "WINDOWS"
-}
+frontend/src/
+├── pages/
+│   ├── HomePage.jsx         # Danh sách entity + Upload panel
+│   ├── EntityDetailPage.jsx # Chi tiết node + Enrichment + Relationships
+│   └── GraphPage.jsx        # GraphView + PathFinder
+├── components/
+│   ├── EntityBadge.jsx      # Color-coded entity badge (10 types)
+│   ├── GraphView.jsx        # Canvas graph visualization
+│   ├── PathFinder.jsx       # Attack path search UI
+│   └── UploadPanel.jsx      # File upload + Free text alert input
+└── api.js                   # Fetch wrappers cho tất cả backend API
 ```
 
 ---
 
-### 3. Enrichment Module
-
-Bổ sung metadata cho event.
-
-#### Enrichment Workers
-
-- GeoIP Worker
-- Threat Intel Worker
-- Asset Context Worker
-- User Context Worker
-- DNS Enrichment Worker
-
-#### Example
-
-```json
-{
-  "sourceIp": "8.8.8.8",
-  "country": "US",
-  "isMalicious": false,
-  "assetOwner": "SOC Team"
-}
-```
-
----
-
-### 4. Detection Engine
-
-Phát hiện tấn công dựa trên rules.
-
-#### Detection Types
-
-- Brute Force Detection
-- Impossible Travel
-- IOC Match
-- Privilege Escalation
-- Lateral Movement
-- Suspicious PowerShell
-- Multiple Failed Login
-
-#### Example Rule
-
-```yaml
-name: brute-force-detection
-condition:
-  failed_login > 5
-window: 5m
-severity: HIGH
-```
-
----
-
-## 🔥 Runtime Rule Management
-
-Rules có thể cập nhật runtime mà không cần restart service.
-
-#### Flow
-```
-Admin API
-↓
-PostgreSQL
-↓
-Rule Cache Reload
-↓
-Detection Engine
-```
-#### Features
-
-- Enable/Disable rule
-- Dynamic reload
-- Rule versioning
-- Rule validation
-- Rule testing
-
----
-
-## 🌐 Graph Analytics (Neo4j)
-
-Module graph hỗ trợ:
-
-- Multi-hop investigation
-- Entity relationship analysis
-- Attack path finding
-- IOC correlation
-- Lateral movement detection
-
-#### Example Graph
-
-```cypher
-(User)-[:LOGIN_FROM]->(IP)
-(IP)-[:RESOLVES_TO]->(DOMAIN)
-(User)-[:ACCESS]->(HOST)
-```
-
----
-
-## 🗄️ Storage Architecture
-
-### MongoDB
-
-Lưu:
-- Raw logs
-- Normalized events
-- Large unstructured data
-
-### PostgreSQL
-
-Lưu:
-- Alerts
-- Rules
-- Asset inventory
-- User configuration
-- Management data
-
-### Neo4j
-
-Lưu:
-- Entity relationship
-- Attack graph
-- IOC correlation graph
-
----
-
-## 🧵 Kafka Streaming
-
-Kafka được dùng để:
-
-- Decouple services
-- Buffer ingestion spikes
-- Async processing
-- Retry handling
-- Event replay
-
-#### Suggested Topics
-```
-raw-logs
-parsed-events
-enriched-events
-alerts
-dead-letter-topic
-```
-
-
----
-
-## 🔐 Security
-
-#### Authentication
-
-- JWT Authentication
-- Refresh Token
-- Role-based Access Control
-
-#### Roles
-
-| Role     | Description          |
-|----------|----------------------|
-| ADMIN    | Full access          |
-| ANALYST  | Detection & alerts   |
-| VIEWER   | Read-only access     |
-
----
-
-## 🚀 API Examples
-
-> Xem đầy đủ tại [API_ENDPOINTS.md](API_ENDPOINTS.md) hoặc [Swagger UI](http://localhost:8080/swagger-ui.html)
-
-### Ingest log (tự detect loại event)
-
-```bash
-POST /api/v1/ingest
-Content-Type: text/plain
-
-{"user":"admin","ip":"1.2.3.4","is_success":true,"workstation":"WIN-PC01"}
-```
-
-### Upload file log
-
-```bash
-curl -X POST http://localhost:8080/api/files/upload \
-  -F "file=@dataset/alert-events.log"
-```
-
-### Truy vấn graph entity
-
-```bash
-GET /api/graph/user/admin/neighbors?hops=2
-GET /api/graph/entities/ip
-```
-
----
-
-## 🚀 Cách chạy dự án
+## Cách chạy
 
 ### Yêu cầu
 
-| Tool | Version |
-|---|---|
-| Java | 21+ |
-| Maven | 3.8+ |
-| Node.js | 18+ |
+| Tool                  | Version  |
+|-----------------------|----------|
+| Java                  | 21+      |
+| Maven                 | 3.8+     |
+| Node.js               | 18+      |
 | Docker & Docker Compose | latest |
 
----
-
-### Bước 1 — Khởi động Infrastructure
+### 1 — Khởi động Infrastructure
 
 ```bash
 docker-compose up -d
 ```
 
-Chờ tất cả service healthy (~30 giây):
+| Service    | Port(s)        | Mục đích                    |
+|------------|----------------|-----------------------------|
+| Kafka      | 9092           | Message streaming           |
+| Zookeeper  | 2181           | Kafka coordinator           |
+| MongoDB    | 27017          | Raw logs + dedup log        |
+| Redis      | 6379           | Enrichment cache            |
+| MinIO      | 9000 / 9001    | File object storage         |
+| Neo4j      | 7474 / 7687    | Graph database              |
+| Prometheus | 9090           | Metrics scraping            |
+| Grafana    | 3000           | Monitoring dashboard        |
 
-| Service | Port | Mục đích |
-|---|---|---|
-| Kafka | 9092 | Message queue |
-| Zookeeper | 2181 | Kafka coordinator |
-| MongoDB | 27017 | Lưu raw log & audit |
-| Redis | 6379 | Cache GeoIP / malware |
-| MinIO | 9000 / 9001 | Object storage cho file log |
-| Neo4j | 7474 / 7687 | Graph database |
-| Prometheus | 9090 | Metrics scraping |
-| Grafana | 3000 | Dashboard monitoring |
-
-Kiểm tra status:
 ```bash
-docker-compose ps
+docker-compose ps   # kiểm tra status
 ```
 
----
-
-### Bước 2 — Khởi động Backend (Spring Boot)
+### 2 — Khởi động Backend
 
 ```bash
 mvn spring-boot:run
 ```
 
-Backend chạy tại: **http://localhost:8080**
+Backend: **http://localhost:8080**
 
----
-
-### Bước 3 — Khởi động Frontend (React)
+### 3 — Khởi động Frontend
 
 ```bash
 cd frontend
-npm install       # chỉ cần lần đầu
+npm install   # chỉ lần đầu
 npm run dev
 ```
 
-Frontend chạy tại: **http://localhost:5173**
+Frontend: **http://localhost:5173**
 
 ---
 
-### Bước 4 — Upload sample data
-
-Upload 4 file log mẫu để tạo đầy đủ entity và quan hệ trong Neo4j:
+## Tạo test data
 
 ```bash
-# Window login events (User, Host, IP)
-curl -X POST http://localhost:8080/api/files/upload \
-  -F "file=@dataset/window-login.log"
+python3 genLog.py
+```
 
-# Process events (FileHash, Host)
-curl -X POST http://localhost:8080/api/files/upload \
-  -F "file=@dataset/process-sample.log"
+Tạo ra:
 
-# Network traffic (IP, Domain)
-curl -X POST http://localhost:8080/api/files/upload \
-  -F "file=@dataset/network-traffic.log"
+| File               | Nội dung                                                     |
+|--------------------|--------------------------------------------------------------|
+| `soc_logs.json`    | ~1000 structured events (NDJSON) — upload qua File Upload    |
+| `soc_freetext.txt` | 25 free-text alert templates — dán vào Free Text panel       |
 
-# Alert events (tất cả 5 entity)
+**Coverage:**
+- AUTH events: User + Host + IP nodes, bao gồm FQDN và email usernames để trigger SAME_AS dedup
+- PROCESS events: FileHash + Process nodes, ~40% reuse known hashes để test `ON MATCH SET`
+- NETWORK events: IP→IP CONNECTED_TO, IP→Domain RESOLVES_TO
+- ALERT events: tất cả 10 entity types, đặc biệt có 1 `full_blast` alert với đủ hết entity fields
+- Free text: brute-force, malware/LOLBIN, C2/DNS tunneling, phishing, cloud exfiltration, CVE exploit, APT chain
+
+```bash
+# Upload structured logs
 curl -X POST http://localhost:8080/api/files/upload \
-  -F "file=@dataset/alert-events.log"
+  -F "file=@soc_logs.json"
+
+# Hoặc dùng UI: mở http://localhost:5173 → kéo thả soc_logs.json vào File Upload panel
+# Copy từng dòng trong soc_freetext.txt → dán vào ô "Nhập Alert (Free Text)" → Gửi Alert
 ```
 
 ---
 
-### Bước 5 — Xem kết quả
+## API Reference
 
-| URL | Mô tả |
-|---|---|
-| http://localhost:5173 | UI danh sách & graph entity |
-| http://localhost:8080/swagger-ui.html | Swagger UI — API documentation |
-| http://localhost:8080/v3/api-docs | OpenAPI JSON spec |
-| http://localhost:8080/actuator/health | Health check tổng thể |
-| http://localhost:8080/actuator/health/liveness | Liveness probe |
-| http://localhost:8080/actuator/health/readiness | Readiness probe |
-| http://localhost:8080/actuator/prometheus | Prometheus metrics endpoint |
-| http://localhost:9090 | Prometheus UI |
-| http://localhost:3000 | Grafana dashboard (admin / admin) |
-| http://localhost:7474 | Neo4j Browser (neo4j / password123) |
-| http://localhost:9001 | MinIO Console (admin / password123) |
+### Ingestion
 
-Query nhanh trong Neo4j Browser:
-```cypher
-MATCH (n)-[r]->(m) RETURN n, r, m LIMIT 50
+```bash
+# Free text (LLM parse)
+POST /api/v1/ingest
+Content-Type: text/plain
+
+Phát hiện đăng nhập đáng ngờ từ IP 185.220.101.42 vào WIN-DC01 lúc 3 giờ sáng
+
+# File upload (NDJSON — mỗi dòng 1 event)
+POST /api/files/upload
+Content-Type: multipart/form-data
+
+file=@soc_logs.json
 ```
 
-#### Grafana dashboard "SOC Entity Management" hiển thị:
-- **Entity Saved** — số entity được ghi vào Neo4j theo loại (Auth/Process/Network/Alert)
-- **Events Processed** — tổng events qua Kafka pipeline
-- **Enrichment Duration** — latency p50/p99 của bước làm giàu dữ liệu
+### Graph Query
+
+```bash
+# Danh sách entity theo loại
+GET /api/graph/entities/{type}
+# type: user | host | ip | domain | filehash | url | process | cloudresource | email | cve
+
+# Neighbor nodes (1–5 hops)
+GET /api/graph/{type}/{value}/neighbors?hops=2
+
+# Attack path
+GET /api/graph/path?fromType=user&fromValue=nghia&toType=ip&toValue=185.220.101.42&maxHops=4
+```
+
+---
+
+## Endpoints UI & Monitoring
+
+| URL                                        | Mô tả                                      |
+|--------------------------------------------|---------------------------------------------|
+| http://localhost:5173                      | Frontend — danh sách entity + graph         |
+| http://localhost:8080/swagger-ui.html      | Swagger UI                                  |
+| http://localhost:8080/actuator/health      | Health check                                |
+| http://localhost:8080/actuator/prometheus  | Prometheus metrics                          |
+| http://localhost:9090                      | Prometheus UI                               |
+| http://localhost:3000                      | Grafana (admin / admin)                     |
+| http://localhost:7474                      | Neo4j Browser (neo4j / password123)         |
+| http://localhost:9001                      | MinIO Console (admin / password123)         |
+
+### Neo4j Quick Queries
+
+```cypher
+-- Xem toàn bộ graph (giới hạn 100 node)
+MATCH (n)-[r]->(m) RETURN n, r, m LIMIT 100
+
+-- Xem các SAME_AS dedup links
+MATCH (a)-[r:SAME_AS]->(b) RETURN a, r, b
+
+-- User tấn công từ IP nào
+MATCH (u:User)-[r:ALERTED_FROM]->(ip:IP) RETURN u.username, ip.address, r.alertName
+
+-- CVE nào ảnh hưởng host nào
+MATCH (cve:Cve)-[:AFFECTS]->(h:Host) RETURN cve.cveId, h.hostname
+
+-- Attack path ngắn nhất
+MATCH path = shortestPath((u:User {username:'nghia'})-[*1..5]-(ip:IP {address:'185.220.101.42'}))
+RETURN path
+```
+
+### Grafana Dashboard "SOC Entity Management"
+
+- **Entity Saved** — số entity ghi vào Neo4j theo event type
+- **Events Processed** — tổng event qua Kafka pipeline
+- **Enrichment Duration** — latency p50/p99 bước làm giàu
 - **HTTP Request Rate / Error Rate** — traffic vào REST API
 - **JVM Memory, GC, Thread count** — sức khoẻ JVM
 
 ---
 
-### Dừng toàn bộ
+## Dừng hệ thống
 
 ```bash
-# Dừng Docker services
-docker-compose down
-
-# Xóa luôn data (nếu cần reset)
-docker-compose down -v
+docker-compose down        # dừng
+docker-compose down -v     # dừng + xóa toàn bộ data
 ```
-
----
-
-## 🐳 Running with Docker
-
-**Start dependencies:**
-
-```bash
-docker-compose up -d
-```
-
-**Services:**
-
-| Service     | Description              |
-|-------------|--------------------------|
-| Kafka       | Event streaming          |
-| Zookeeper   | Kafka coordination       |
-| MongoDB     | Raw & normalized storage |
-| Redis       | Enrichment cache         |
-| MinIO       | File object storage      |
-| Neo4j       | Graph analytics          |
-| Prometheus  | Metrics scraping         |
-| Grafana     | Monitoring dashboard     |
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
