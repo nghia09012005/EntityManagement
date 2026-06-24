@@ -6,12 +6,19 @@ import { NODE_COLORS } from './EntityBadge'
 import { getNeighbors } from '../api'
 
 /* ──────── helpers ──────── */
-const LABEL_TO_TYPE = { User: 'user', Host: 'host', IP: 'ip', Domain: 'domain', FileHash: 'filehash' }
-const ID_PROP       = { User: 'username', Host: 'hostname', IP: 'address', Domain: 'name', FileHash: 'hash' }
+const LABEL_TO_TYPE = {
+  User: 'user', Host: 'host', IP: 'ip', Domain: 'domain', FileHash: 'filehash',
+  Url: 'url', Process: 'process', CloudResource: 'cloudresource', Email: 'email', Cve: 'cve',
+}
+const ID_PROP = {
+  User: 'username', Host: 'hostname', IP: 'address', Domain: 'name', FileHash: 'hash',
+  Url: 'url', Process: 'name', CloudResource: 'resourceId', Email: 'address', Cve: 'cveId',
+}
 
 function nodeValue(n) {
   const p = n._props
-  return p.username || p.hostname || p.address || p.name ||
+  return p.username || p.hostname || p.url || p.resourceId || p.cveId ||
+         p.address || p.name ||
          (p.hash ? p.hash.slice(0, 14) + '…' : String(n.id))
 }
 

@@ -29,7 +29,9 @@ class GraphEntityServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new GraphEntityService(neo4jClient, new SimpleMeterRegistry(), new com.fasterxml.jackson.databind.ObjectMapper());
+        service = new GraphEntityService(neo4jClient, new SimpleMeterRegistry(),
+                new com.fasterxml.jackson.databind.ObjectMapper(),
+                new com.viettelDigitalTalent.EntitiyManagement.graph.service.DedupSignal());
     }
 
     // ── AuthenticationEvent ──────────────────────────────────────────────────
@@ -114,8 +116,8 @@ class GraphEntityServiceTest {
 
         service.save(event);
 
-        // 1 for FileHash MERGE, 1 for EXECUTED_ON relationship
-        verify(neo4jClient, times(2)).query(anyString());
+        // FileHash MERGE + Process MERGE + HASH_OF + FileHash EXECUTED_ON + Process EXECUTED_ON
+        verify(neo4jClient, times(5)).query(anyString());
     }
 
     // ── NetworkEvent ─────────────────────────────────────────────────────────
@@ -289,6 +291,144 @@ class GraphEntityServiceTest {
         ProcessEvent event = new ProcessEvent();
         event.setFileHash("abc123");
         event.setTimestamp(null); // should default to now
+        service.save(event);
+        verify(neo4jClient, atLeastOnce()).query(anyString());
+    }
+
+    // ── AlertEvent new entity types ───────────────────────────────────────────
+
+    @Test
+    void saveAlert_withUrlCreatesUrlNode() {
+        AlertEvent event = new AlertEvent();
+        event.setAlertName("Phishing URL");
+        event.setSeverity("HIGH");
+        event.setTargetUrl("https://phish-bank.tk/login");
+        event.setTimestamp(LocalDateTime.now());
+        service.save(event);
+        verify(neo4jClient, atLeastOnce()).query(anyString());
+    }
+
+    @Test
+    void saveAlert_withUrlAndIpCreatesAccessedRelation() {
+        AlertEvent event = new AlertEvent();
+        event.setAlertName("C2 Callback");
+        event.setSeverity("CRITICAL");
+        event.setTargetUrl("http://evil-c2.onion.ws/payload.exe");
+        event.setTargetIp("192.168.1.100");
+        event.setTimestamp(LocalDateTime.now());
+        service.save(event);
+        verify(neo4jClient, atLeastOnce()).query(anyString());
+    }
+
+    @Test
+    void saveAlert_withProcessCreatesProcessNode() {
+        AlertEvent event = new AlertEvent();
+        event.setAlertName("LOLBIN certutil");
+        event.setSeverity("HIGH");
+        event.setTargetProcess("certutil.exe");
+        event.setTimestamp(LocalDateTime.now());
+        service.save(event);
+        verify(neo4jClient, atLeastOnce()).query(anyString());
+    }
+
+    @Test
+    void saveAlert_withProcessAndHostCreatesExecutedOnRelation() {
+        AlertEvent event = new AlertEvent();
+        event.setAlertName("Mimikatz");
+        event.setSeverity("CRITICAL");
+        event.setTargetProcess("mimikatz.exe");
+        event.setTargetHost("WIN-DC01");
+        event.setTimestamp(LocalDateTime.now());
+        service.save(event);
+        verify(neo4jClient, atLeastOnce()).query(anyString());
+    }
+
+    @Test
+    void saveAlert_withCloudResourceCreatesCloudNode() {
+        AlertEvent event = new AlertEvent();
+        event.setAlertName("Unusual S3 Access");
+        event.setSeverity("HIGH");
+        event.setTargetCloudResourceId("arn:aws:s3:::sensitive-bucket-prod");
+        event.setTimestamp(LocalDateTime.now());
+        service.save(event);
+        verify(neo4jClient, atLeastOnce()).query(anyString());
+    }
+
+    @Test
+    void saveAlert_withCloudResourceAndUserCreatesAccessedRelation() {
+        AlertEvent event = new AlertEvent();
+        event.setAlertName("Cloud Lateral Movement");
+        event.setSeverity("CRITICAL");
+        event.setTargetCloudResourceId("arn:aws:ec2:ap-southeast-1:123456789012:instance/i-001");
+        event.setTargetUser("attacker");
+        event.setTargetIp("185.220.101.42");
+        event.setTimestamp(LocalDateTime.now());
+        service.save(event);
+        verify(neo4jClient, atLeastOnce()).query(anyString());
+    }
+
+    @Test
+    void saveAlert_withEmailCreatesEmailNode() {
+        AlertEvent event = new AlertEvent();
+        event.setAlertName("Spear Phishing");
+        event.setSeverity("HIGH");
+        event.setTargetEmail("ceo@company.vn");
+        event.setTimestamp(LocalDateTime.now());
+        service.save(event);
+        verify(neo4jClient, atLeastOnce()).query(anyString());
+    }
+
+    @Test
+    void saveAlert_withEmailAndUserCreatesHasEmailRelation() {
+        AlertEvent event = new AlertEvent();
+        event.setAlertName("BEC");
+        event.setSeverity("CRITICAL");
+        event.setTargetEmail("finance@company.vn");
+        event.setTargetUser("admin");
+        event.setTimestamp(LocalDateTime.now());
+        service.save(event);
+        verify(neo4jClient, atLeastOnce()).query(anyString());
+    }
+
+    @Test
+    void saveAlert_withCveCreatesCveNode() {
+        AlertEvent event = new AlertEvent();
+        event.setAlertName("Log4Shell");
+        event.setSeverity("CRITICAL");
+        event.setTargetCve("CVE-2021-44228");
+        event.setTimestamp(LocalDateTime.now());
+        service.save(event);
+        verify(neo4jClient, atLeastOnce()).query(anyString());
+    }
+
+    @Test
+    void saveAlert_withCveAndHostCreatesAffectsRelation() {
+        AlertEvent event = new AlertEvent();
+        event.setAlertName("Zerologon");
+        event.setSeverity("CRITICAL");
+        event.setTargetCve("CVE-2020-1472");
+        event.setTargetHost("WIN-DC01");
+        event.setTimestamp(LocalDateTime.now());
+        service.save(event);
+        verify(neo4jClient, atLeastOnce()).query(anyString());
+    }
+
+    @Test
+    void saveAlert_fullBlastAllEntities() {
+        AlertEvent event = new AlertEvent();
+        event.setAlertName("APT Full Chain");
+        event.setSeverity("CRITICAL");
+        event.setTargetUser("nghia");
+        event.setTargetIp("185.220.101.42");
+        event.setTargetHost("WIN-DC01");
+        event.setTargetDomain("evil-c2.onion.ws");
+        event.setTargetFileHash("d41d8cd98f00b204e9800998ecf8427e");
+        event.setTargetUrl("http://evil-c2.onion.ws/payload.exe");
+        event.setTargetProcess("mimikatz.exe");
+        event.setTargetCloudResourceId("arn:aws:s3:::sensitive-bucket-prod");
+        event.setTargetEmail("ceo@company.vn");
+        event.setTargetCve("CVE-2021-44228");
+        event.setTimestamp(LocalDateTime.now());
         service.save(event);
         verify(neo4jClient, atLeastOnce()).query(anyString());
     }

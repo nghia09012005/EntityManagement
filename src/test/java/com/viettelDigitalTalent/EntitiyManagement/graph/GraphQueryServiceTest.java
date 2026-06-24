@@ -43,15 +43,25 @@ class GraphQueryServiceTest {
     }
 
     @Test
+    void resolveLabelReturnsNewEntityTypes() {
+        assertThat(service.resolveLabel("url")).isEqualTo("Url");
+        assertThat(service.resolveLabel("process")).isEqualTo("Process");
+        assertThat(service.resolveLabel("cloudresource")).isEqualTo("CloudResource");
+        assertThat(service.resolveLabel("email")).isEqualTo("Email");
+        assertThat(service.resolveLabel("cve")).isEqualTo("Cve");
+    }
+
+    @Test
     void resolveLabelIsCaseInsensitive() {
         assertThat(service.resolveLabel("USER")).isEqualTo("User");
         assertThat(service.resolveLabel("IP")).isEqualTo("IP");
+        assertThat(service.resolveLabel("CVE")).isEqualTo("Cve");
     }
 
     @Test
     void resolveLabelReturnsNullForUnknown() {
         assertThat(service.resolveLabel("unknown")).isNull();
-        assertThat(service.resolveLabel("process")).isNull();
+        assertThat(service.resolveLabel("tenant")).isNull();
     }
 
     // ── getNeighbors ──────────────────────────────────────────────────────────

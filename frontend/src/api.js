@@ -44,3 +44,9 @@ export const getNeighbors = (label, value, hops = 1) =>
 export const findPath = (fromType, fromValue, toType, toValue, maxHops = 6, mode = 'shortest') =>
   fetch(`${BASE_URL}/api/graph/path?fromType=${fromType}&fromValue=${encodeURIComponent(fromValue)}&toType=${toType}&toValue=${encodeURIComponent(toValue)}&maxHops=${maxHops}&mode=${mode}`)
     .then(r => r.json())
+
+export const fetchDlqEvents = (page = 0, size = 20) =>
+  fetch(`${BASE_URL}/api/dlq/events?page=${page}&size=${size}`).then(r => r.json())
+
+export const fetchDlqSummary = () =>
+  fetch(`${BASE_URL}/api/dlq/summary`).then(r => r.json())

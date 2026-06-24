@@ -53,6 +53,7 @@ public class EnrichmentService {
         event.setEnriched(true);
         sample.stop(Timer.builder("soc.enrichment.duration")
                 .tag("event_type", event.getClass().getSimpleName())
+                .publishPercentileHistogram(true)
                 .register(meterRegistry));
         logEnrichmentResult(event);
     }

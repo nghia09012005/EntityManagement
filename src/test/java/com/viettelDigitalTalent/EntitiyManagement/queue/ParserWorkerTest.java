@@ -1,11 +1,10 @@
 package com.viettelDigitalTalent.EntitiyManagement.queue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.viettelDigitalTalent.EntitiyManagement.enrichment.core.EnrichmentService;
-import com.viettelDigitalTalent.EntitiyManagement.graph.service.GraphEntityService;
 import com.viettelDigitalTalent.EntitiyManagement.llm.core.LlmProcess;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.alert.AlertEvent;
 import com.viettelDigitalTalent.EntitiyManagement.parser.core.ParserDispatcher;
+import com.viettelDigitalTalent.EntitiyManagement.queue.publisher.DeadLetterPublisher;
 import com.viettelDigitalTalent.EntitiyManagement.queue.worker.ParserWorker;
 import com.viettelDigitalTalent.EntitiyManagement.storage.repository.AuditLogRepository;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -16,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.task.SyncTaskExecutor;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.mockito.ArgumentMatchers.*;
@@ -27,51 +27,50 @@ class ParserWorkerTest {
     private ParserWorker worker;
 
     @Mock ParserDispatcher parserDispatcher;
-    @Mock EnrichmentService enrichService;
     @Mock AuditLogRepository auditLogRepository;
-    @Mock GraphEntityService graphEntityService;
     @Mock LlmProcess llmProcess;
+    @Mock KafkaTemplate<String, String> kafkaTemplate;
+    @Mock DeadLetterPublisher deadLetterPublisher;
 
     @BeforeEach
     void setUp() {
         worker = new ParserWorker();
-        ReflectionTestUtils.setField(worker, "parserDispatcher",  parserDispatcher);
-        ReflectionTestUtils.setField(worker, "objectMapper",      new ObjectMapper());
-        ReflectionTestUtils.setField(worker, "taskExecutor",      new SyncTaskExecutor());
-        ReflectionTestUtils.setField(worker, "enrichService",     enrichService);
-        ReflectionTestUtils.setField(worker, "auditLogRepository",auditLogRepository);
-        ReflectionTestUtils.setField(worker, "graphEntityService",graphEntityService);
-        ReflectionTestUtils.setField(worker, "llmProcess",        llmProcess);
-        ReflectionTestUtils.setField(worker, "meterRegistry",     new SimpleMeterRegistry());
+        ReflectionTestUtils.setField(worker, "parserDispatcher",   parserDispatcher);
+        ReflectionTestUtils.setField(worker, "objectMapper",       new ObjectMapper());
+        ReflectionTestUtils.setField(worker, "taskExecutor",       new SyncTaskExecutor());
+        ReflectionTestUtils.setField(worker, "auditLogRepository", auditLogRepository);
+        ReflectionTestUtils.setField(worker, "llmProcess",         llmProcess);
+        ReflectionTestUtils.setField(worker, "meterRegistry",      new SimpleMeterRegistry());
+        ReflectionTestUtils.setField(worker, "kafkaTemplate",      kafkaTemplate);
+        ReflectionTestUtils.setField(worker, "deadLetterPublisher",deadLetterPublisher);
     }
 
-    // ── JSON paths ─────────────────────────────────────────────────────────────
+    // ── Valid JSON → audit log + publish normalized ───────────────────────────
 
     @Test
-    void consumeAuthJsonCallsSaveRawAndEnrich() {
+    void consumeAuthJson_savesAuditLogAndPublishesNormalized() {
         String json = "{\"eventType\":\"AUTHENTICATION\",\"username\":\"admin\",\"workstation\":\"WIN-PC01\"}";
         ConsumerRecord<String, String> record = new ConsumerRecord<>("raw-logs", 0, 0L, "windows", json);
 
         worker.consume(record);
 
         verify(auditLogRepository).saveRawLog(any(), any(), any(), any(), any());
-        verify(enrichService).enrich(any());
-        verify(graphEntityService).save(any());
+        verify(kafkaTemplate).send(anyString(), anyString());
     }
 
     @Test
-    void consumeAlertJsonCallsSaveRawAndEnrich() {
+    void consumeAlertJson_savesAuditLogAndPublishesNormalized() {
         String json = "{\"eventType\":\"ALERT\",\"alertName\":\"Brute Force\",\"severity\":\"HIGH\",\"targetIp\":\"1.2.3.4\"}";
         ConsumerRecord<String, String> record = new ConsumerRecord<>("raw-logs", 0, 0L, "alert", json);
 
         worker.consume(record);
 
         verify(auditLogRepository).saveRawLog(any(), any(), any(), any(), any());
-        verify(enrichService).enrich(any());
+        verify(kafkaTemplate).send(anyString(), anyString());
     }
 
     @Test
-    void consumeNetworkJsonCallsSaveRawAndEnrich() {
+    void consumeNetworkJson_savesAuditLog() {
         String json = "{\"eventType\":\"NETWORK\",\"srcIp\":\"10.0.0.1\",\"dstIp\":\"1.2.3.4\"}";
         ConsumerRecord<String, String> record = new ConsumerRecord<>("raw-logs", 0, 0L, null, json);
 
@@ -81,20 +80,19 @@ class ParserWorkerTest {
     }
 
     @Test
-    void consumeProcessJsonCallsSaveRawAndEnrich() {
+    void consumeProcessJson_savesAuditLog() {
         String json = "{\"eventType\":\"PROCESS\",\"processName\":\"cmd.exe\",\"fileHash\":\"abc123\"}";
         ConsumerRecord<String, String> record = new ConsumerRecord<>("raw-logs", 0, 0L, "process", json);
 
         worker.consume(record);
 
         verify(auditLogRepository).saveRawLog(any(), any(), any(), any(), any());
-        verify(enrichService).enrich(any());
     }
 
     // ── Free-text path (LLM async) ────────────────────────────────────────────
 
     @Test
-    void consumeFreeTextCallsLlmProcessAsync() {
+    void consumeFreeText_callsLlmProcessAndPublishes() {
         String freeText = "Failed password for admin from 185.220.101.1 port 22 ssh2";
 
         AlertEvent placeholder = new AlertEvent();
@@ -112,11 +110,11 @@ class ParserWorkerTest {
         worker.consume(record);
 
         verify(llmProcess).extractAlert(freeText);
-        verify(enrichService).enrich(any());
+        verify(kafkaTemplate).send(anyString(), anyString());
     }
 
     @Test
-    void consumeFreeTextHandlesNullLlmResult() {
+    void consumeFreeText_handlesNullLlmResult() {
         String freeText = "some plain text log line without JSON";
 
         AlertEvent placeholder = new AlertEvent();
@@ -128,29 +126,10 @@ class ParserWorkerTest {
         ConsumerRecord<String, String> record = new ConsumerRecord<>("raw-logs", 0, 0L, null, freeText);
         worker.consume(record);
 
-        // Should not throw, should still enrich
-        verify(enrichService).enrich(any());
+        verify(kafkaTemplate).send(anyString(), anyString());
     }
 
     // ── Error handling ────────────────────────────────────────────────────────
-
-    @Test
-    void consumeDoesNotThrowOnEnrichmentError() {
-        String json = "{\"eventType\":\"AUTHENTICATION\",\"username\":\"bob\",\"workstation\":\"LAP-01\"}";
-        ConsumerRecord<String, String> record = new ConsumerRecord<>("raw-logs", 0, 0L, "windows", json);
-        doThrow(new RuntimeException("enrich failed")).when(enrichService).enrich(any());
-
-        worker.consume(record); // must not propagate exception
-    }
-
-    @Test
-    void consumeDoesNotThrowOnGraphSaveError() {
-        String json = "{\"eventType\":\"AUTHENTICATION\",\"username\":\"admin\",\"workstation\":\"WIN-PC01\"}";
-        ConsumerRecord<String, String> record = new ConsumerRecord<>("raw-logs", 0, 0L, "windows", json);
-        doThrow(new RuntimeException("neo4j down")).when(graphEntityService).save(any());
-
-        worker.consume(record); // must not propagate exception
-    }
 
     @Test
     void consumeDoesNotThrowOnAuditSaveError() {
@@ -162,7 +141,7 @@ class ParserWorkerTest {
     }
 
     @Test
-    void consumeJsonWithNullKeyUsesEventSource() {
+    void consumeNullKeyUsesEventSource() {
         String json = "{\"eventType\":\"ALERT\",\"alertName\":\"Test\",\"severity\":\"LOW\"}";
         ConsumerRecord<String, String> record = new ConsumerRecord<>("raw-logs", 0, 0L, null, json);
 
@@ -172,7 +151,7 @@ class ParserWorkerTest {
     }
 
     @Test
-    void consumeInvalidJsonFallsBackToAutoDetect() {
+    void consumeInvalidJson_fallsBackToAutoDetect() {
         String badJson = "not valid json {";
         AlertEvent event = new AlertEvent();
         event.setAlertName("Parsed");
@@ -183,5 +162,16 @@ class ParserWorkerTest {
         worker.consume(record);
 
         verify(parserDispatcher).autoDetect(badJson);
+    }
+
+    @Test
+    void consumePublishError_sendsToDeadLetter() {
+        String json = "{\"eventType\":\"AUTHENTICATION\",\"username\":\"admin\",\"workstation\":\"WIN-PC01\"}";
+        ConsumerRecord<String, String> record = new ConsumerRecord<>("raw-logs", 0, 0L, "windows", json);
+        when(kafkaTemplate.send(anyString(), anyString())).thenThrow(new RuntimeException("kafka down"));
+
+        worker.consume(record);
+
+        verify(deadLetterPublisher).publish(anyString(), anyString(), any(Exception.class));
     }
 }

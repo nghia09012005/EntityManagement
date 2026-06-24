@@ -5,67 +5,141 @@
   "refresh": "15s",
   "time": { "from": "now-30m", "to": "now" },
   "panels": [
-    {
-      "id": 1, "type": "stat", "title": "Entities Saved (total)",
-      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+
+    { "id": 100, "type": "row", "title": "Overview", "collapsed": false,
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 } },
+
+    { "id": 1, "type": "stat", "title": "Entities Saved (total)",
+      "gridPos": { "x": 0, "y": 1, "w": 4, "h": 4 },
       "targets": [{ "expr": "sum(soc_entity_saved_total)", "legendFormat": "total" }],
       "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } }
     },
-    {
-      "id": 2, "type": "stat", "title": "Events Processed (total)",
-      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+    { "id": 2, "type": "stat", "title": "Events Processed (total)",
+      "gridPos": { "x": 4, "y": 1, "w": 4, "h": 4 },
       "targets": [{ "expr": "sum(soc_events_processed_total)", "legendFormat": "total" }],
       "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } }
     },
-    {
-      "id": 3, "type": "stat", "title": "HTTP Requests/s",
-      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+    { "id": 3, "type": "stat", "title": "Enrichment Calls (total)",
+      "gridPos": { "x": 8, "y": 1, "w": 4, "h": 4 },
+      "targets": [{ "expr": "sum(soc_enrichment_duration_seconds_count)", "legendFormat": "total" }],
+      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    { "id": 4, "type": "stat", "title": "Neo4j Writes (total)",
+      "gridPos": { "x": 12, "y": 1, "w": 4, "h": 4 },
+      "targets": [{ "expr": "sum(soc_neo4j_save_duration_seconds_count)", "legendFormat": "total" }],
+      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    { "id": 5, "type": "stat", "title": "HTTP Requests/s",
+      "gridPos": { "x": 16, "y": 1, "w": 4, "h": 4 },
       "targets": [{ "expr": "sum(rate(http_server_requests_seconds_count[1m]))", "legendFormat": "req/s" }],
       "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } }
     },
-    {
-      "id": 4, "type": "stat", "title": "HTTP Error Rate",
-      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+    { "id": 6, "type": "stat", "title": "HTTP Error Rate",
+      "gridPos": { "x": 20, "y": 1, "w": 4, "h": 4 },
       "targets": [{ "expr": "sum(rate(http_server_requests_seconds_count{status=~\"4..|5..\"}[1m]))", "legendFormat": "errors/s" }],
-      "options": { "colorMode": "background", "thresholds": { "steps": [{"color":"green","value":0},{"color":"red","value":0.1}] }, "reduceOptions": { "calcs": ["lastNotNull"] } }
+      "options": {
+        "colorMode": "background",
+        "thresholds": { "steps": [{ "color": "green", "value": 0 }, { "color": "red", "value": 0.1 }] },
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      }
     },
-    {
-      "id": 5, "type": "timeseries", "title": "Entities Saved by Type",
-      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
-      "targets": [{ "expr": "rate(soc_entity_saved_total[1m])", "legendFormat": "{{event_type}}" }]
+
+    { "id": 101, "type": "row", "title": "Pipeline Throughput", "collapsed": false,
+      "gridPos": { "x": 0, "y": 5, "w": 24, "h": 1 } },
+
+    { "id": 7, "type": "timeseries", "title": "Entities Saved Rate (by event type)",
+      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 8 },
+      "targets": [{ "expr": "rate(soc_entity_saved_total[1m])", "legendFormat": "{{event_type}}" }],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
     },
-    {
-      "id": 6, "type": "timeseries", "title": "Enrichment Duration (p99)",
-      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
-      "targets": [{ "expr": "histogram_quantile(0.99, rate(soc_enrichment_duration_seconds_bucket[5m]))", "legendFormat": "p99" },
-                  { "expr": "histogram_quantile(0.50, rate(soc_enrichment_duration_seconds_bucket[5m]))", "legendFormat": "p50" }]
+    { "id": 8, "type": "timeseries", "title": "Enrichment Rate (by event type)",
+      "gridPos": { "x": 12, "y": 6, "w": 12, "h": 8 },
+      "targets": [{ "expr": "rate(soc_enrichment_duration_seconds_count[1m])", "legendFormat": "{{event_type}}" }],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
     },
-    {
-      "id": 7, "type": "timeseries", "title": "HTTP Request Rate by Endpoint",
-      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
-      "targets": [{ "expr": "rate(http_server_requests_seconds_count[1m])", "legendFormat": "{{method}} {{uri}} {{status}}" }]
+
+    { "id": 102, "type": "row", "title": "Enrichment Performance", "collapsed": false,
+      "gridPos": { "x": 0, "y": 14, "w": 24, "h": 1 } },
+
+    { "id": 9, "type": "timeseries", "title": "Enrichment Duration — p99 / p50",
+      "gridPos": { "x": 0, "y": 15, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "histogram_quantile(0.99, sum by (le, event_type)(rate(soc_enrichment_duration_seconds_bucket[5m])))", "legendFormat": "p99 {{event_type}}" },
+        { "expr": "histogram_quantile(0.50, sum by (le, event_type)(rate(soc_enrichment_duration_seconds_bucket[5m])))", "legendFormat": "p50 {{event_type}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
     },
-    {
-      "id": 8, "type": "timeseries", "title": "JVM Memory Usage",
-      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+    { "id": 10, "type": "bargauge", "title": "Enrichment p99 per Event Type (current)",
+      "gridPos": { "x": 12, "y": 15, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "histogram_quantile(0.99, sum by (le, event_type)(rate(soc_enrichment_duration_seconds_bucket[5m])))", "legendFormat": "{{event_type}}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": { "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 0.1 }, { "color": "red", "value": 0.5 }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal" }
+    },
+
+    { "id": 103, "type": "row", "title": "Neo4j Query Performance", "collapsed": false,
+      "gridPos": { "x": 0, "y": 23, "w": 24, "h": 1 } },
+
+    { "id": 11, "type": "timeseries", "title": "Neo4j Save Duration — p99 / p50",
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "histogram_quantile(0.99, sum by (le, event_type)(rate(soc_neo4j_save_duration_seconds_bucket[5m])))", "legendFormat": "p99 {{event_type}}" },
+        { "expr": "histogram_quantile(0.50, sum by (le, event_type)(rate(soc_neo4j_save_duration_seconds_bucket[5m])))", "legendFormat": "p50 {{event_type}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    { "id": 12, "type": "timeseries", "title": "Neo4j Write Rate (by event type)",
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
+      "targets": [{ "expr": "rate(soc_neo4j_save_duration_seconds_count[1m])", "legendFormat": "{{event_type}}" }],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+
+    { "id": 104, "type": "row", "title": "HTTP API", "collapsed": false,
+      "gridPos": { "x": 0, "y": 32, "w": 24, "h": 1 } },
+
+    { "id": 13, "type": "timeseries", "title": "HTTP Request Rate by Endpoint",
+      "gridPos": { "x": 0, "y": 33, "w": 12, "h": 8 },
+      "targets": [{ "expr": "rate(http_server_requests_seconds_count[1m])", "legendFormat": "{{method}} {{uri}} {{status}}" }],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    { "id": 14, "type": "timeseries", "title": "HTTP Latency — p99 / p50",
+      "gridPos": { "x": 12, "y": 33, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "histogram_quantile(0.99, sum by (le, uri, method)(rate(http_server_requests_seconds_bucket[5m])))", "legendFormat": "p99 {{method}} {{uri}}" },
+        { "expr": "histogram_quantile(0.50, sum by (le, uri, method)(rate(http_server_requests_seconds_bucket[5m])))", "legendFormat": "p50 {{method}} {{uri}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+
+    { "id": 105, "type": "row", "title": "JVM / System", "collapsed": false,
+      "gridPos": { "x": 0, "y": 41, "w": 24, "h": 1 } },
+
+    { "id": 15, "type": "timeseries", "title": "JVM Heap Memory",
+      "gridPos": { "x": 0, "y": 42, "w": 8, "h": 8 },
       "targets": [
         { "expr": "jvm_memory_used_bytes{area=\"heap\"}", "legendFormat": "Heap Used" },
         { "expr": "jvm_memory_max_bytes{area=\"heap\"}", "legendFormat": "Heap Max" }
       ],
       "fieldConfig": { "defaults": { "unit": "bytes" } }
     },
-    {
-      "id": 9, "type": "timeseries", "title": "JVM GC Pause Time",
-      "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
-      "targets": [{ "expr": "rate(jvm_gc_pause_seconds_sum[1m])", "legendFormat": "{{action}} {{cause}}" }]
+    { "id": 16, "type": "timeseries", "title": "JVM GC Pause Time",
+      "gridPos": { "x": 8, "y": 42, "w": 8, "h": 8 },
+      "targets": [{ "expr": "rate(jvm_gc_pause_seconds_sum[1m])", "legendFormat": "{{action}} {{cause}}" }],
+      "fieldConfig": { "defaults": { "unit": "s" } }
     },
-    {
-      "id": 10, "type": "timeseries", "title": "Thread Count",
-      "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+    { "id": 17, "type": "timeseries", "title": "JVM Thread Count",
+      "gridPos": { "x": 16, "y": 42, "w": 8, "h": 8 },
       "targets": [
         { "expr": "jvm_threads_live_threads", "legendFormat": "live" },
         { "expr": "jvm_threads_daemon_threads", "legendFormat": "daemon" }
       ]
     }
+
   ]
 }

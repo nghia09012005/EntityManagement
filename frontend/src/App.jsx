@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-do
 import EntityListPage from './pages/EntityListPage'
 import EntityDetailPage from './pages/EntityDetailPage'
 import PathFinderPage from './pages/PathFinderPage'
+import DlqPage from './pages/DlqPage'
 import UploadPanel from './components/UploadPanel'
 
 function AppContent() {
@@ -18,6 +19,7 @@ function AppContent() {
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
           <Link to="/"      className={`nav-link ${isHome ? 'active' : ''}`}>Entities</Link>
           <Link to="/paths" className={`nav-link ${location.pathname === '/paths' ? 'active' : ''}`}>Path Finder</Link>
+          <Link to="/dlq"   className={`nav-link ${location.pathname === '/dlq'   ? 'active' : ''}`}>Dead Letters</Link>
         </div>
       </nav>
       <main className="main">
@@ -26,6 +28,7 @@ function AppContent() {
           <Route path="/" element={<EntityListPage key={uploadKey} />} />
           <Route path="/entity/:type/:value" element={<EntityDetailPage />} />
           <Route path="/paths" element={<PathFinderPage />} />
+          <Route path="/dlq"   element={<DlqPage />} />
         </Routes>
       </main>
     </>

@@ -52,6 +52,9 @@ public class EnrichmentWorker {
             kafkaTemplate.send(KafkaTopicConstants.ENRICHED_EVENTS, enrichedPayload);
             log.info("[EnrichmentWorker] Published enriched event ID: {}", eventId);
 
+            // test DLQ
+//            throw new RuntimeException("Intentional test exception");
+
         } catch (Exception e) {
             log.error("[EnrichmentWorker] Lỗi enrich event: {}", e.getMessage(), e);
             deadLetterPublisher.publish(KafkaTopicConstants.NORMALIZED_EVENTS, payload, e);

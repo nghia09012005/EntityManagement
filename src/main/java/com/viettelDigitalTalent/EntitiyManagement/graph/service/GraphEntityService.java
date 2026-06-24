@@ -11,6 +11,7 @@ import com.viettelDigitalTalent.EntitiyManagement.normalize.event.NetworkEvent;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.event.ProcessEvent;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.neo4j.core.Neo4jClient;
 import org.springframework.stereotype.Service;
@@ -26,20 +27,30 @@ public class GraphEntityService {
     private final Neo4jClient neo4jClient;
     private final ObjectMapper objectMapper;
     private final DedupSignal dedupSignal;
+    private final MeterRegistry meterRegistry;
     private final Counter authCounter;
     private final Counter processCounter;
     private final Counter networkCounter;
     private final Counter alertCounter;
+    private final Timer authTimer;
+    private final Timer processTimer;
+    private final Timer networkTimer;
+    private final Timer alertTimer;
 
     public GraphEntityService(Neo4jClient neo4jClient, MeterRegistry meterRegistry,
                               ObjectMapper objectMapper, DedupSignal dedupSignal) {
-        this.neo4jClient  = neo4jClient;
-        this.objectMapper = objectMapper;
-        this.dedupSignal  = dedupSignal;
+        this.neo4jClient   = neo4jClient;
+        this.objectMapper  = objectMapper;
+        this.dedupSignal   = dedupSignal;
+        this.meterRegistry = meterRegistry;
         this.authCounter    = Counter.builder("soc.entity.saved").tag("event_type", "AUTHENTICATION").register(meterRegistry);
         this.processCounter = Counter.builder("soc.entity.saved").tag("event_type", "PROCESS").register(meterRegistry);
         this.networkCounter = Counter.builder("soc.entity.saved").tag("event_type", "NETWORK").register(meterRegistry);
         this.alertCounter   = Counter.builder("soc.entity.saved").tag("event_type", "ALERT").register(meterRegistry);
+        this.authTimer    = Timer.builder("soc.neo4j.save.duration").tag("event_type", "AUTHENTICATION").publishPercentileHistogram(true).register(meterRegistry);
+        this.processTimer = Timer.builder("soc.neo4j.save.duration").tag("event_type", "PROCESS").publishPercentileHistogram(true).register(meterRegistry);
+        this.networkTimer = Timer.builder("soc.neo4j.save.duration").tag("event_type", "NETWORK").publishPercentileHistogram(true).register(meterRegistry);
+        this.alertTimer   = Timer.builder("soc.neo4j.save.duration").tag("event_type", "ALERT").publishPercentileHistogram(true).register(meterRegistry);
     }
 
     private static final String REL_UPSERT = """
@@ -53,10 +64,14 @@ public class GraphEntityService {
         try {
             LocalDateTime now = event.getTimestamp() != null ? event.getTimestamp() : LocalDateTime.now();
             String eid = event.getEventId();
-            if (event instanceof AuthenticationEvent auth) { saveAuth(auth, now, eid);    authCounter.increment();    dedupSignal.mark(); }
-            else if (event instanceof ProcessEvent proc)   { saveProcess(proc, now, eid); processCounter.increment(); dedupSignal.mark(); }
-            else if (event instanceof NetworkEvent net)    { saveNetwork(net, now, eid);  networkCounter.increment(); dedupSignal.mark(); }
-            else if (event instanceof AlertEvent alert)    { saveAlert(alert, now, eid);  alertCounter.increment();   dedupSignal.mark(); }
+            Timer.Sample neo4jSample = Timer.start(meterRegistry);
+            Timer neo4jTimer;
+            if (event instanceof AuthenticationEvent auth) { saveAuth(auth, now, eid);    authCounter.increment();    dedupSignal.mark(); neo4jTimer = authTimer; }
+            else if (event instanceof ProcessEvent proc)   { saveProcess(proc, now, eid); processCounter.increment(); dedupSignal.mark(); neo4jTimer = processTimer; }
+            else if (event instanceof NetworkEvent net)    { saveNetwork(net, now, eid);  networkCounter.increment(); dedupSignal.mark(); neo4jTimer = networkTimer; }
+            else if (event instanceof AlertEvent alert)    { saveAlert(alert, now, eid);  alertCounter.increment();   dedupSignal.mark(); neo4jTimer = alertTimer; }
+            else { neo4jTimer = authTimer; }
+            neo4jSample.stop(neo4jTimer);
         } catch (Exception e) {
             log.error("[Graph] Lỗi khi lưu entity cho event {}: {}", event.getEventId(), e.getMessage(), e);
         }
