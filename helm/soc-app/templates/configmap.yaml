@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "soc-app.labels" . | nindent 4 }}
+data:
+  application-k8s.yaml: |
+    spring:
+      data:
+        mongodb:
+          uri: {{ .Values.config.mongoUri }}
+        neo4j:
+          uri: {{ .Values.config.neo4jUri }}
+          authentication:
+            username: {{ .Values.config.neo4jUsername }}
+            password: {{ .Values.config.neo4jPassword }}
+        redis:
+          host: {{ .Values.config.redisHost }}
+          port: {{ .Values.config.redisPort }}
+      kafka:
+        bootstrap-servers: {{ .Values.config.kafkaBootstrap }}
+    minio:
+      endpoint: {{ .Values.config.minioEndpoint }}
+      access-key: {{ .Values.config.minioAccessKey }}
+      secret-key: {{ .Values.config.minioSecretKey }}
+      bucket: {{ .Values.config.minioBucket }}

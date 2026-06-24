@@ -47,10 +47,18 @@ public class GraphQueryService {
         return LABEL_MAP.get(key.toLowerCase());
     }
 
+    /** Chuyển tenantId thành Neo4j label an toàn */
+    public static String tenantLabel(String tenantId) {
+        // if (tenantId == null || tenantId.isBlank()) return "T_default";
+        // return "T_" + tenantId.replace("-", "_");
+        return tenantId;
+    }
+
     // ── Neighbors ──────────────────────────────────────────────────────────────
 
-    public GraphResponse getNeighbors(String nodeLabel, String value, int hops) {
+    public GraphResponse getNeighbors(String nodeLabel, String value, int hops, String tenantId) {
         String idProp  = ID_PROP.get(nodeLabel);
+        String tl      = tenantLabel(tenantId);
         int maxHops    = Math.min(Math.max(hops, 1), 5);
         int limit      = switch (maxHops) {
             case 1 -> 200;
@@ -59,18 +67,20 @@ public class GraphQueryService {
         };
 
         String cypher = String.format("""
-                MATCH path = (n:%s {%s: $value})-[*1..%d]-(m)
-                UNWIND relationships(path) AS r
-                WITH DISTINCT r, startNode(r) AS src, endNode(r) AS tgt
-                RETURN
-                  labels(src)[0] AS srcLabel, properties(src) AS srcProps,
-                  type(r)        AS relType,  properties(r)   AS relProps,
-                  labels(tgt)[0] AS tgtLabel, properties(tgt) AS tgtProps
-                LIMIT %d
-                """, nodeLabel, idProp, maxHops, limit);
+            MATCH path = (n:%s {tenantId: $tenantId, %s: $value})-[*1..%d]-(m)
+            WHERE m.tenantId = $tenantId
+            UNWIND relationships(path) AS r
+            WITH DISTINCT r, startNode(r) AS src, endNode(r) AS tgt
+            RETURN
+              labels(src)[0] AS srcLabel, properties(src) AS srcProps,
+              type(r)        AS relType,  properties(r) AS relProps,
+              labels(tgt)[0] AS tgtLabel, properties(tgt) AS tgtProps
+            LIMIT %d
+            """, nodeLabel, idProp, maxHops, limit);
 
         Collection<Map<String, Object>> rows = neo4jClient
                 .query(cypher)
+                .bind(tl).to("tenantId")
                 .bind(value).to("value")
                 .fetch()
                 .all();
@@ -82,33 +92,38 @@ public class GraphQueryService {
 
     public PathResponse findPath(String fromLabel, String fromValue,
                                  String toLabel,   String toValue,
-                                 int maxHops, String mode) {
+                                 int maxHops, String mode, String tenantId) {
         String fromIdProp  = ID_PROP.get(fromLabel);
         String toIdProp    = ID_PROP.get(toLabel);
+        String tl          = tenantLabel(tenantId);
         int    clampedHops = Math.min(Math.max(maxHops, 1), 10);
         String pathFn      = "all".equalsIgnoreCase(mode) ? "allShortestPaths" : "shortestPath";
 
-        String cypher = String.format("""
-                MATCH (src:%s {%s: $fromValue}), (dst:%s {%s: $toValue})
-                MATCH path = %s((src)-[*1..%d]-(dst))
-                WITH collect(path) AS paths
-                UNWIND paths AS p
-                WITH p, length(p) AS pathLen
-                ORDER BY pathLen
-                UNWIND relationships(p) AS r
-                WITH DISTINCT r, startNode(r) AS s, endNode(r) AS t,
-                     min(pathLen) AS minLen, count(DISTINCT p) AS pathCnt
-                RETURN
-                  labels(s)[0] AS srcLabel, properties(s) AS srcProps,
-                  type(r)      AS relType,  properties(r)  AS relProps,
-                  labels(t)[0] AS tgtLabel, properties(t)  AS tgtProps,
-                  minLen, pathCnt
-                """, fromLabel, fromIdProp, toLabel, toIdProp, pathFn, clampedHops);
+        // Viết lại Cypher: Loại bỏ label tl, thêm điều kiện lọc tenantId trực tiếp
+    String cypher = String.format("""
+            MATCH (src:%s {tenantId: $tenantId, %s: $fromValue}), 
+                  (dst:%s {tenantId: $tenantId, %s: $toValue})
+            MATCH path = %s((src)-[*1..%d]-(dst))
+            WHERE ALL(n IN nodes(path) WHERE n.tenantId = $tenantId)
+            WITH collect(path) AS paths
+            UNWIND paths AS p
+            WITH p, length(p) AS pathLen
+            ORDER BY pathLen
+            UNWIND relationships(p) AS r
+            WITH DISTINCT r, startNode(r) AS s, endNode(r) AS t,
+                 min(pathLen) AS minLen, count(DISTINCT p) AS pathCnt
+            RETURN
+              labels(s)[0] AS srcLabel, properties(s) AS srcProps,
+              type(r)      AS relType,  properties(r) AS relProps,
+              labels(t)[0] AS tgtLabel, properties(t) AS tgtProps,
+              minLen, pathCnt
+            """, fromLabel, fromIdProp, toLabel, toIdProp, pathFn, clampedHops);
 
         Collection<Map<String, Object>> rows = neo4jClient
                 .query(cypher)
                 .bind(fromValue).to("fromValue")
                 .bind(toValue).to("toValue")
+                .bind(tl).to("tenantId")
                 .fetch()
                 .all();
 
@@ -144,13 +159,18 @@ public class GraphQueryService {
 
     // ── Entity list ────────────────────────────────────────────────────────────
 
-    public List<NodeDto> listEntities(String nodeLabel) {
+    public List<NodeDto> listEntities(String nodeLabel, String tenantId) {
         String idProp = ID_PROP.get(nodeLabel);
+        String tl     = tenantLabel(tenantId);
 
-        Collection<Map<String, Object>> rows = neo4jClient
-                .query(String.format("MATCH (n:%s) RETURN properties(n) AS props", nodeLabel))
-                .fetch()
-                .all();
+        // Không còn dùng label động (:tl), thay bằng điều kiện lọc property {tenantId: $tenantId}
+    String cypher = String.format("MATCH (n:%s {tenantId: $tenantId}) RETURN properties(n) AS props", nodeLabel);
+
+    Collection<Map<String, Object>> rows = neo4jClient
+            .query(cypher)
+            .bind(tl).to("tenantId") // Truyền tenantId vào tham số
+            .fetch()
+            .all();
 
         return rows.stream()
                 .map(row -> {

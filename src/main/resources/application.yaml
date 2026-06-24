@@ -68,6 +68,10 @@ abuseipdb:
 otx:
    api-key: 1e6c8e740611e066be69e03b6982fc6ac4d2be3e71ca019397ab9012d6d54f9d         # https://otx.alienvault.com/api
 
+jwt:
+  secret: soc-entity-management-jwt-secret-key-256bit-for-hs256-signing-2025
+  expiration-ms: 86400000   # 24 giờ
+
 soc:
   dedup:
     interval-ms: 1200   # chạy SAME_AS deduplication mỗi 2 phút

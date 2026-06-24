@@ -23,6 +23,7 @@ public class BaseEvent {
     private String source;             // e.g., "winlogbeat", "syslog"
     private String category;           // e.g., "AUTHENTICATION", "PROCESS"
     private LocalDateTime timestamp;   // Thời gian thực của log
+    private String tenantId;           // Tenant owner — set bởi Ingestion API từ JWT
 
     // Phần Enrichment
     private String enrichmentId;       // Link tới MongoDB

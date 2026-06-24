@@ -416,3 +416,136 @@ RETURN path
 docker-compose down        # dừng
 docker-compose down -v     # dừng + xóa toàn bộ data
 ```
+
+---
+
+## Deploy K8s (local — minikube)
+
+### Yêu cầu
+
+```bash
+# Cài minikube
+brew install minikube
+
+# Cài helm (chỉ cần nếu dùng Helm)
+brew install helm
+```
+
+---
+
+### Cách 1 — Plain Manifest
+
+Dùng thư mục `k8s/` với `kubectl apply` trực tiếp.
+
+```bash
+# 1. Start minikube
+minikube start --memory=8192 --cpus=4
+minikube addons enable ingress
+
+# 2. Build image vào minikube (không cần push Docker Hub)
+eval $(minikube docker-env)
+docker build -t soc/backend:latest .
+cd frontend && docker build -t soc/frontend:latest . && cd ..
+
+# 3. Sửa imagePullPolicy trong backend.yaml và frontend.yaml thành Never
+#    (để minikube dùng local image thay vì pull từ registry)
+sed -i '' 's/pullPolicy: IfNotPresent/pullPolicy: Never/' k8s/backend.yaml k8s/frontend.yaml
+
+# 4. Deploy theo thứ tự
+kubectl apply -f k8s/00-namespace.yaml
+kubectl apply -f k8s/01-secrets.yaml
+kubectl apply -f k8s/02-configmap.yaml
+kubectl apply -f k8s/redis.yaml -f k8s/mongodb.yaml -f k8s/neo4j.yaml
+kubectl apply -f k8s/kafka.yaml -f k8s/minio.yaml
+kubectl apply -f k8s/backend.yaml -f k8s/frontend.yaml
+kubectl apply -f k8s/ingress.yaml
+
+# 5. Kiểm tra pods
+kubectl get pods -n soc
+
+# 6. Trỏ domain local
+echo "$(minikube ip)  soc.local" | sudo tee -a /etc/hosts
+```
+
+Mở **http://soc.local** trên browser.
+
+---
+
+### Cách 2 — Helm Chart
+
+Dùng thư mục `helm/soc-app/` cho backend + frontend.  
+Infrastructure (MongoDB, Kafka, Redis, Neo4j, MinIO) dùng Bitnami Helm chart có sẵn.
+
+```bash
+# 1. Start minikube
+minikube start --memory=8192 --cpus=4
+minikube addons enable ingress
+
+# 2. Build image vào minikube
+eval $(minikube docker-env)
+docker build -t soc/backend:latest .
+cd frontend && docker build -t soc/frontend:latest . && cd ..
+
+# 3. Thêm Bitnami repo
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
+
+# 4. Tạo namespace
+kubectl create namespace soc
+
+# 5. Cài infrastructure bằng Bitnami
+helm install mongodb bitnami/mongodb -n soc \
+  --set auth.rootPassword=root \
+  --set auth.rootUser=root
+
+helm install redis bitnami/redis -n soc \
+  --set auth.enabled=false
+
+helm install kafka bitnami/kafka -n soc \
+  --set listeners.client.protocol=PLAINTEXT \
+  --set controller.replicaCount=1
+
+helm install neo4j neo4j/neo4j -n soc \
+  --set neo4j.password=password123 \
+  --set volumes.data.mode=defaultStorageClass
+
+helm install minio bitnami/minio -n soc \
+  --set auth.rootUser=admin \
+  --set auth.rootPassword=password123
+
+# 6. Cài app (backend + frontend)
+helm install soc-app helm/soc-app -n soc \
+  --set backend.pullPolicy=Never \
+  --set frontend.pullPolicy=Never
+
+# 7. Kiểm tra
+kubectl get pods -n soc
+helm list -n soc
+
+# 8. Trỏ domain
+echo "$(minikube ip)  soc.local" | sudo tee -a /etc/hosts
+```
+
+Mở **http://soc.local** trên browser.
+
+#### Cập nhật app (sau khi sửa code)
+
+```bash
+eval $(minikube docker-env)
+docker build -t soc/backend:latest .      # rebuild
+helm upgrade soc-app helm/soc-app -n soc  # rolling update
+```
+
+#### Gỡ cài đặt
+
+```bash
+# Helm
+helm uninstall soc-app mongodb redis kafka neo4j minio -n soc
+
+# Manifest
+kubectl delete -f k8s/
+
+# Xóa toàn bộ
+kubectl delete namespace soc
+minikube stop
+```

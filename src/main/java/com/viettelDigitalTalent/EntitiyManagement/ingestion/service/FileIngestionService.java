@@ -1,6 +1,8 @@
 package com.viettelDigitalTalent.EntitiyManagement.ingestion.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.viettelDigitalTalent.EntitiyManagement.ingestion.dto.FileIngestionResponse;
+import com.viettelDigitalTalent.EntitiyManagement.ingestion.dto.IngestionEnvelope;
 import com.viettelDigitalTalent.EntitiyManagement.management.service.MinioService;
 import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
@@ -22,11 +24,12 @@ public class FileIngestionService {
     private final MinioService minioService;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final TaskExecutor taskExecutor;
+    private final ObjectMapper objectMapper;
 
-    public void ingestFileAsync(String fileName) {
+    public void ingestFileAsync(String fileName, String tenantId) {
         CompletableFuture.runAsync(() -> {
             try {
-                FileIngestionResponse response = ingestFile(fileName);
+                FileIngestionResponse response = ingestFile(fileName, tenantId);
                 log.info("File ingestion finished: fileName={} source={} readLines={} queuedMessages={}",
                         response.getFileName(),
                         response.getSource(),
@@ -38,7 +41,7 @@ public class FileIngestionService {
         }, taskExecutor);
     }
 
-    public FileIngestionResponse ingestFile(String fileName) throws Exception {
+    public FileIngestionResponse ingestFile(String fileName, String tenantId) throws Exception {
         int readLines = 0;
         int queuedMessages = 0;
 
@@ -48,7 +51,12 @@ public class FileIngestionService {
             String line;
             while ((line = bufferedReader.readLine()) != null) {
                 if (line.isBlank()) continue;
-                kafkaTemplate.send("raw-logs", line);  // no key — worker tự detect từ content
+
+                // Tạo envelope giống IngestionService
+                IngestionEnvelope envelope = new IngestionEnvelope(tenantId, line);
+                String json = objectMapper.writeValueAsString(envelope);
+
+                kafkaTemplate.send("raw-logs", json);  // no key — worker tự detect từ content
                 readLines++;
                 queuedMessages++;
             }

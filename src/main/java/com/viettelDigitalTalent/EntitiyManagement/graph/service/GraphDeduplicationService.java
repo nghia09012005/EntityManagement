@@ -27,7 +27,7 @@ public class GraphDeduplicationService {
     @Scheduled(fixedDelayString = "${soc.dedup.interval-ms:120000}")
     public void runDeduplication() {
         if (!dedupSignal.getAndReset()) {
-            log.info("No new entity -> terminate cron deup job");
+//            log.info("No new entity -> terminate cron deup job");
             return;
         }
 

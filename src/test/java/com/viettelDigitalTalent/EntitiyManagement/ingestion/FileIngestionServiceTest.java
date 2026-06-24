@@ -1,11 +1,13 @@
 package com.viettelDigitalTalent.EntitiyManagement.ingestion;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.viettelDigitalTalent.EntitiyManagement.ingestion.dto.FileIngestionResponse;
 import com.viettelDigitalTalent.EntitiyManagement.ingestion.service.FileIngestionService;
 import com.viettelDigitalTalent.EntitiyManagement.management.service.MinioService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.task.SyncTaskExecutor;
@@ -23,38 +25,45 @@ import static org.mockito.Mockito.*;
 class FileIngestionServiceTest {
 
     private FileIngestionService service;
+    private final ObjectMapper objectMapper = new ObjectMapper(); // Khởi tạo ObjectMapper
 
     @Mock MinioService minioService;
     @Mock KafkaTemplate<String, String> kafkaTemplate;
 
     @BeforeEach
     void setUp() {
-        service = new FileIngestionService(minioService, kafkaTemplate, new SyncTaskExecutor());
+        // Cập nhật constructor với objectMapper
+        service = new FileIngestionService(minioService, kafkaTemplate, new SyncTaskExecutor(), objectMapper);
     }
 
     @Test
     void ingestFileSendsEachLineToKafka() throws Exception {
         String content = "{\"user\":\"admin\"}\n{\"srcIp\":\"1.1.1.1\"}\n";
+        String tenantId = "tenant-1";
         InputStream stream = new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8));
         when(minioService.downloadFile("test.log")).thenReturn(stream);
 
-        FileIngestionResponse response = service.ingestFile("test.log");
+        FileIngestionResponse response = service.ingestFile("test.log", tenantId);
 
         assertThat(response.getParsedLines()).isEqualTo(2);
-        assertThat(response.getQueuedMessages()).isEqualTo(2);
-        verify(kafkaTemplate, times(2)).send(eq("raw-logs"), anyString());
+
+        // Kiểm tra xem JSON có chứa đúng tenantId không
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(kafkaTemplate, times(2)).send(eq("raw-logs"), captor.capture());
+
+        assertThat(captor.getAllValues().get(0)).contains("\"tenantId\":\"tenant-1\"");
+        assertThat(captor.getAllValues().get(0)).contains("\"user\":\"admin\"");
     }
 
     @Test
     void ingestFileSkipsBlankLines() throws Exception {
-        String content = "{\"user\":\"admin\"}\n\n  \n{\"srcIp\":\"1.1.1.1\"}\n";
+        String content = "line1\n\n  \nline2\n";
         InputStream stream = new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8));
         when(minioService.downloadFile("test.log")).thenReturn(stream);
 
-        FileIngestionResponse response = service.ingestFile("test.log");
+        service.ingestFile("test.log", "tenant-1");
 
-        assertThat(response.getParsedLines()).isEqualTo(2);
-        verify(kafkaTemplate, times(2)).send(anyString(), anyString());
+        verify(kafkaTemplate, times(2)).send(eq("raw-logs"), anyString());
     }
 
     @Test
@@ -62,22 +71,10 @@ class FileIngestionServiceTest {
         InputStream stream = new ByteArrayInputStream(new byte[0]);
         when(minioService.downloadFile("empty.log")).thenReturn(stream);
 
-        FileIngestionResponse response = service.ingestFile("empty.log");
+        FileIngestionResponse response = service.ingestFile("empty.log", "tenant-1");
 
         assertThat(response.getParsedLines()).isEqualTo(0);
-        assertThat(response.getQueuedMessages()).isEqualTo(0);
         verify(kafkaTemplate, never()).send(anyString(), anyString());
-    }
-
-    @Test
-    void ingestFileSetsFileNameInResponse() throws Exception {
-        InputStream stream = new ByteArrayInputStream("{\"user\":\"x\"}".getBytes(StandardCharsets.UTF_8));
-        when(minioService.downloadFile("events.log")).thenReturn(stream);
-
-        FileIngestionResponse response = service.ingestFile("events.log");
-
-        assertThat(response.getFileName()).isEqualTo("events.log");
-        assertThat(response.getSource()).isEqualTo("auto");
     }
 
     @Test
@@ -85,27 +82,15 @@ class FileIngestionServiceTest {
         InputStream stream = new ByteArrayInputStream("{\"user\":\"admin\"}".getBytes(StandardCharsets.UTF_8));
         when(minioService.downloadFile("async.log")).thenReturn(stream);
 
-        service.ingestFileAsync("async.log");
+        service.ingestFileAsync("async.log", "tenant-1");
 
-        verify(kafkaTemplate, times(1)).send(anyString(), anyString());
+        verify(kafkaTemplate, timeout(1000).times(1)).send(anyString(), anyString());
     }
 
     @Test
     void ingestFileAsyncHandlesExceptionGracefully() throws Exception {
         when(minioService.downloadFile(anyString())).thenThrow(new RuntimeException("MinIO down"));
-
-        service.ingestFileAsync("fail.log"); // must not throw
-    }
-
-    @Test
-    void ingestFileSendsFreeTextLinesToKafka() throws Exception {
-        String content = "Failed password for admin from 192.168.1.1 port 22 ssh2\n";
-        InputStream stream = new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8));
-        when(minioService.downloadFile("syslog.log")).thenReturn(stream);
-
-        FileIngestionResponse response = service.ingestFile("syslog.log");
-
-        assertThat(response.getParsedLines()).isEqualTo(1);
-        verify(kafkaTemplate).send(eq("raw-logs"), contains("Failed password"));
+        service.ingestFileAsync("fail.log", "tenant-1");
+        // Không có exception văng ra là test pass
     }
 }

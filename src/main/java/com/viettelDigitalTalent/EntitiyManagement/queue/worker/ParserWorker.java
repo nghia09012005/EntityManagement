@@ -2,6 +2,7 @@ package com.viettelDigitalTalent.EntitiyManagement.queue.worker;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.viettelDigitalTalent.EntitiyManagement.ingestion.dto.IngestionEnvelope;
 import com.viettelDigitalTalent.EntitiyManagement.llm.core.LlmProcess;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.alert.AlertEvent;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.base.BaseEvent;
@@ -53,16 +54,32 @@ public class ParserWorker {
         String source  = record.key();
         String rawJson = record.value();
 
-        log.info("DEBUG Kafka Raw: {}", rawJson);
+        // Unwrap envelope để lấy tenantId từ Ingestion API
+        String tenantId = null;
+        String actualPayload = rawJson;
+        try {
+            IngestionEnvelope envelope = objectMapper.readValue(rawJson, IngestionEnvelope.class);
+            if (envelope.tenantId() != null && envelope.payload() != null) {
+                tenantId    = envelope.tenantId();
+                actualPayload = envelope.payload();
+                log.debug("[ParserWorker] Unwrapped envelope tenantId={}", tenantId);
+            }
+        } catch (Exception ignored) {
+            // raw log không phải envelope — xử lý bình thường
+        }
+
+        final String finalTenantId = tenantId;
+        final String rawPayload    = actualPayload;
 
         try {
-            BaseEvent event = resolveEvent(rawJson);
+            BaseEvent event = resolveEvent(rawPayload);
 
             if (event.getEventId() == null) {
                 event.setEventId(UUID.randomUUID().toString());
             }
+            event.setTenantId(finalTenantId);
 
-            log.info("Parsed event: {} [ID: {}]", event.getClass().getSimpleName(), event.getEventId());
+            log.info("Parsed event: {} [ID: {}] tenantId={}", event.getClass().getSimpleName(), event.getEventId(), finalTenantId);
             eventsProcessedCounter().increment();
 
             String eventId       = event.getEventId();
@@ -72,10 +89,10 @@ public class ParserWorker {
 
             Map<String, Object> rawDataSnapshot;
             try {
-                rawDataSnapshot = objectMapper.readValue(rawJson, new TypeReference<>() {});
+                rawDataSnapshot = objectMapper.readValue(rawPayload, new TypeReference<>() {});
             } catch (Exception ex) {
                 rawDataSnapshot = new HashMap<>();
-                rawDataSnapshot.put("_raw", rawJson);
+                rawDataSnapshot.put("_raw", rawPayload);
             }
 
             // Sync: lưu raw log ngay trên Kafka consumer thread — đảm bảo document
@@ -87,7 +104,7 @@ public class ParserWorker {
                 log.error("[ParserWorker] Lỗi khi lưu raw log cho ID: {}", eventId, e);
             }
 
-            boolean isFreeText = !rawJson.trim().startsWith("{") && !rawJson.trim().startsWith("[");
+            boolean isFreeText = !rawPayload.trim().startsWith("{") && !rawPayload.trim().startsWith("[");
 
             if (isFreeText && event instanceof AlertEvent alertEvent) {
                 // Free-text: chạy LLM async rồi mới publish normalized-events
@@ -104,19 +121,19 @@ public class ParserWorker {
                             alertEvent.setTargetDomain(llmResult.getTargetDomain());
                             alertEvent.setTargetFileHash(llmResult.getTargetFileHash());
                         }
-                        publishNormalized(alertEvent, rawJson);
+                        publishNormalized(alertEvent, rawPayload);
                     } catch (Exception e) {
                         log.error("[ParserWorker] Lỗi LLM cho ID: {}", eventId, e);
-                        deadLetterPublisher.publish(KafkaTopicConstants.RAW_LOGS, rawJson, e);
+                        deadLetterPublisher.publish(KafkaTopicConstants.RAW_LOGS, rawPayload, e);
                     }
                 }, taskExecutor);
             } else {
-                publishNormalized(event, rawJson);
+                publishNormalized(event, rawPayload);
             }
 
         } catch (Exception e) {
             log.error("Lỗi parse log từ {}: {}", source, e.getMessage());
-            deadLetterPublisher.publish(KafkaTopicConstants.RAW_LOGS, rawJson, e);
+            deadLetterPublisher.publish(KafkaTopicConstants.RAW_LOGS, rawPayload, e);
         }
     }
 

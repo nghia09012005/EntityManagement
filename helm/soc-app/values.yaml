@@ -1,0 +1,41 @@
+namespace: soc
+
+backend:
+  image: soc/backend:latest
+  pullPolicy: IfNotPresent
+  replicas: 2
+  port: 8080
+  resources:
+    requests: { memory: "256Mi", cpu: "200m" }
+    limits:   { memory: "768Mi", cpu: "500m" }
+
+frontend:
+  image: soc/frontend:latest
+  pullPolicy: IfNotPresent
+  replicas: 2
+  port: 80
+  resources:
+    requests: { memory: "32Mi",  cpu: "50m" }
+    limits:   { memory: "128Mi", cpu: "100m" }
+
+ingress:
+  enabled: true
+  host: soc.local
+  className: nginx
+  tls: false
+  # tls: true → cần cert-manager + clusterIssuer
+  clusterIssuer: letsencrypt-prod
+
+# Kết nối tới infrastructure (Bitnami chart release names)
+config:
+  mongoUri:        "mongodb://root:root@mongodb:27017/socdb?authSource=admin"
+  neo4jUri:        "bolt://neo4j:7687"
+  neo4jUsername:   "neo4j"
+  neo4jPassword:   "password123"
+  redisHost:       "redis-master"
+  redisPort:       "6379"
+  kafkaBootstrap:  "kafka:9092"
+  minioEndpoint:   "http://minio:9000"
+  minioAccessKey:  "admin"
+  minioSecretKey:  "password123"
+  minioBucket:     "soc-logs"

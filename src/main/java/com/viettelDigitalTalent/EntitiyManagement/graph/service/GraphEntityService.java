@@ -54,16 +54,24 @@ public class GraphEntityService {
                           r.lastEventId = $eventId
             """;
 
+    /** Chuyển tenantId (UUID) thành Neo4j label an toàn: T_abc_123 */
+    static String tenantLabel(String tenantId) {
+        // if (tenantId == null || tenantId.isBlank()) return "T_default";
+        // return "T_" + tenantId.replace("-", "_");
+        return tenantId;
+    }
+
     public void save(BaseEvent event) {
         try {
             LocalDateTime now = event.getTimestamp() != null ? event.getTimestamp() : LocalDateTime.now();
             String eid = event.getEventId();
+            String tl  = tenantLabel(event.getTenantId());
             Timer.Sample neo4jSample = Timer.start(meterRegistry);
             Timer neo4jTimer;
-            if (event instanceof AuthenticationEvent auth) { saveAuth(auth, now, eid);    authCounter.increment();    dedupSignal.mark(); neo4jTimer = authTimer; }
-            else if (event instanceof ProcessEvent proc)   { saveProcess(proc, now, eid); processCounter.increment(); dedupSignal.mark(); neo4jTimer = processTimer; }
-            else if (event instanceof NetworkEvent net)    { saveNetwork(net, now, eid);  networkCounter.increment(); dedupSignal.mark(); neo4jTimer = networkTimer; }
-            else if (event instanceof AlertEvent alert)    { saveAlert(alert, now, eid);  alertCounter.increment();   dedupSignal.mark(); neo4jTimer = alertTimer; }
+            if (event instanceof AuthenticationEvent auth) { saveAuth(auth, now, eid, tl);    authCounter.increment();    dedupSignal.mark(); neo4jTimer = authTimer; }
+            else if (event instanceof ProcessEvent proc)   { saveProcess(proc, now, eid, tl); processCounter.increment(); dedupSignal.mark(); neo4jTimer = processTimer; }
+            else if (event instanceof NetworkEvent net)    { saveNetwork(net, now, eid, tl);  networkCounter.increment(); dedupSignal.mark(); neo4jTimer = networkTimer; }
+            else if (event instanceof AlertEvent alert)    { saveAlert(alert, now, eid, tl);  alertCounter.increment();   dedupSignal.mark(); neo4jTimer = alertTimer; }
             else { neo4jTimer = authTimer; }
             neo4jSample.stop(neo4jTimer);
         } catch (Exception e) {
@@ -73,7 +81,7 @@ public class GraphEntityService {
 
     // ── Save methods ──────────────────────────────────────────────────────────
 
-    private void saveAuth(AuthenticationEvent e, LocalDateTime now, String eventId) {
+    private void saveAuth(AuthenticationEvent e, LocalDateTime now, String eventId, String tl) {
         String username = EntityNormalizer.username(e.getUsername());
         String hostname = EntityNormalizer.hostname(e.getWorkstation());
         if (username == null || hostname == null) return;
@@ -83,16 +91,17 @@ public class GraphEntityService {
         p.put("hostname", hostname);
         p.put("now",      now.toString());
         p.put("eventId",  eventId);
+        p.put("tenantId", tl);
 
         neo4jClient.query("""
-                MERGE (u:User {username: $username})
-                MERGE (h:Host {hostname: $hostname})
-                MERGE (u)-[r:LOGGED_IN_TO]->(h)
-                ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1,
-                              r.firstEventId = $eventId, r.lastEventId = $eventId
-                ON MATCH SET  r.lastSeen = $now, r.count = r.count + 1,
-                              r.lastEventId = $eventId
-                """).bindAll(p).run();
+        MERGE (u:User {tenantId: $tenantId, username: $username})
+        MERGE (h:Host {tenantId: $tenantId, hostname: $hostname})
+        MERGE (u)-[r:LOGGED_IN_TO]->(h)
+        ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1,
+                      r.firstEventId = $eventId, r.lastEventId = $eventId
+        ON MATCH SET  r.lastSeen = $now, r.count = r.count + 1,
+                      r.lastEventId = $eventId
+        """).bindAll(p).run();
 
         String ipAddr = EntityNormalizer.ip(e.getIpAddress());
         if (ipAddr != null) {
@@ -101,11 +110,12 @@ public class GraphEntityService {
             ip.put("hostname", hostname);
             ip.put("now",      now.toString());
             ip.put("eventId",  eventId);
+            ip.put("tenantId", tl);
 
             neo4jClient.query("""
-                    MERGE (ip:IP {address: $address})
+                    MERGE (ip:IP {tenantId: $tenantId, address: $address})
                     WITH ip
-                    MATCH (h:Host {hostname: $hostname})
+                    MATCH (h:Host {tenantId: $tenantId, hostname: $hostname})
                     MERGE (ip)-[r:AUTHENTICATED_TO]->(h)
                     ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1,
                                   r.firstEventId = $eventId, r.lastEventId = $eventId
@@ -115,7 +125,7 @@ public class GraphEntityService {
         }
     }
 
-    private void saveProcess(ProcessEvent e, LocalDateTime now, String eventId) {
+    private void saveProcess(ProcessEvent e, LocalDateTime now, String eventId, String tl) {
         String hash = EntityNormalizer.hash(e.getFileHash());
         if (hash == null) return;
 
@@ -123,10 +133,9 @@ public class GraphEntityService {
         p.put("hash",    hash);
         p.put("now",     now.toString());
         p.put("eventId", eventId);
+        p.put("tenantId", tl);
 
-        neo4jClient.query("""
-                MERGE (f:FileHash {hash: $hash})
-                """).bindAll(p).run();
+        neo4jClient.query("MERGE (f:FileHash {tenantId: $tenantId,hash: $hash})").bindAll(p).run();
 
         String procName = EntityNormalizer.processName(e.getProcessName());
         if (procName != null) {
@@ -136,21 +145,20 @@ public class GraphEntityService {
             pp.put("commandLine", e.getCommandLine());
             pp.put("now",         now.toString());
             pp.put("eventId",     eventId);
+            pp.put("tenantId", tl);
             neo4jClient.query("""
-                    MERGE (proc:Process {name: $name})
+                    MERGE (proc:Process{tenantId: $tenantId, name: $name})
                     ON CREATE SET proc.path = $path, proc.commandLine = $commandLine
                     ON MATCH SET  proc.path = coalesce($path, proc.path),
                                   proc.commandLine = coalesce($commandLine, proc.commandLine)
                     """).bindAll(pp).run();
 
-            if (hash != null) {
-                pp.put("hash", hash);
-                neo4jClient.query("""
-                        MATCH (f:FileHash {hash: $hash})
-                        MATCH (proc:Process {name: $name})
-                        MERGE (f)-[r:HASH_OF]->(proc)
-                        """ + REL_UPSERT).bindAll(pp).run();
-            }
+            pp.put("hash", hash);
+            neo4jClient.query("""
+        MATCH (f:FileHash {tenantId: $tenantId, hash: $hash})
+        MATCH (proc:Process {tenantId: $tenantId, name: $name})
+        MERGE (f)-[r:HASH_OF]->(proc)
+        """ + REL_UPSERT).bindAll(pp).run();
         }
 
         Object rawHostname = e.getRawData().get("hostname");
@@ -159,10 +167,11 @@ public class GraphEntityService {
             if (hostname != null) {
                 p.put("hostname",    hostname);
                 p.put("processName", e.getProcessName());
+                p.put("tenantId", tl);
 
                 neo4jClient.query("""
-                        MATCH (f:FileHash {hash: $hash})
-                        MERGE (h:Host {hostname: $hostname})
+                        MATCH (f:FileHash {tenantId: $tenantId, hash: $hash})
+                        MERGE (h:Host {tenantId: $tenantId, hostname: $hostname})
                         MERGE (f)-[r:EXECUTED_ON]->(h)
                         ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1,
                                       r.processName = $processName,
@@ -177,9 +186,10 @@ public class GraphEntityService {
                     ph.put("hostname", hostname);
                     ph.put("now",      now.toString());
                     ph.put("eventId",  eventId);
+                    ph.put("tenantId", tl);
                     neo4jClient.query("""
-                            MATCH (proc:Process {name: $name})
-                            MERGE (h:Host {hostname: $hostname})
+                            MATCH (proc:Process: {tenantId: $tenantId, name: $name})
+                            MERGE (h:Host {tenantId: $tenantId, hostname: $hostname})
                             MERGE (proc)-[r:EXECUTED_ON]->(h)
                             """ + REL_UPSERT).bindAll(ph).run();
                 }
@@ -187,7 +197,7 @@ public class GraphEntityService {
         }
     }
 
-    private void saveNetwork(NetworkEvent e, LocalDateTime now, String eventId) {
+    private void saveNetwork(NetworkEvent e, LocalDateTime now, String eventId, String tl) {
         String srcIp = EntityNormalizer.ip(e.getSrcIp());
         String dstIp = EntityNormalizer.ip(e.getDstIp());
         if (srcIp == null || dstIp == null) return;
@@ -198,10 +208,11 @@ public class GraphEntityService {
         p.put("dstPort",    e.getDstPort());
         p.put("now",        now.toString());
         p.put("eventId",    eventId);
+        p.put("tenantId", tl);
 
         neo4jClient.query("""
-                MERGE (src:IP {address: $srcAddress})
-                MERGE (dst:IP {address: $dstAddress})
+                MERGE (src:IP {tenantId: $tenantId,address: $srcAddress})
+                MERGE (dst:IP {tenantId: $tenantId, address: $dstAddress})
                 MERGE (src)-[r:CONNECTED_TO]->(dst)
                 ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1,
                               r.dstPort = $dstPort,
@@ -217,10 +228,11 @@ public class GraphEntityService {
             dp.put("domain",  dstDomain);
             dp.put("now",     now.toString());
             dp.put("eventId", eventId);
+            dp.put("tenantId", tl);
 
             neo4jClient.query("""
-                    MATCH (ip:IP {address: $address})
-                    MERGE (d:Domain {name: $domain})
+                    MATCH (ip:IP {tenantId: $tenantId, address: $address})
+                    MERGE (d:Domain {tenantId: $tenantId, name: $domain})
                     MERGE (ip)-[r:RESOLVES_TO]->(d)
                     ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1,
                                   r.firstEventId = $eventId, r.lastEventId = $eventId
@@ -230,7 +242,7 @@ public class GraphEntityService {
         }
     }
 
-    private void saveAlert(AlertEvent e, LocalDateTime now, String eventId) {
+    private void saveAlert(AlertEvent e, LocalDateTime now, String eventId, String tl) {
         String targetUser     = EntityNormalizer.username(e.getTargetUser());
         String targetIp       = EntityNormalizer.ip(e.getTargetIp());
         String targetHost     = EntityNormalizer.hostname(e.getTargetHost());
@@ -245,10 +257,11 @@ public class GraphEntityService {
             p.put("severity",  e.getSeverity());
             p.put("now",       now.toString());
             p.put("eventId",   eventId);
+            p.put("tenantId", tl);
 
             neo4jClient.query("""
-                    MERGE (u:User {username: $username})
-                    MERGE (ip:IP {address: $address})
+                    MERGE (u:User {tenantId: $tenantId, username: $username})
+                    MERGE (ip:IP {tenantId: $tenantId, address: $address})
                     MERGE (u)-[r:ALERTED_FROM]->(ip)
                     ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1,
                                   r.alertName = $alertName, r.severity = $severity,
@@ -264,10 +277,11 @@ public class GraphEntityService {
             p.put("address", targetIp);
             p.put("now",     now.toString());
             p.put("eventId", eventId);
+            p.put("tenantId", tl);
 
             neo4jClient.query("""
-                    MERGE (f:FileHash {hash: $hash})
-                    MERGE (ip:IP {address: $address})
+                    MERGE (f:FileHash {tenantId: $tenantId, hash: $hash})
+                    MERGE (ip:IP {tenantId: $tenantId, address: $address})
                     MERGE (f)-[r:DETECTED_ON]->(ip)
                     ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1,
                                   r.firstEventId = $eventId, r.lastEventId = $eventId
@@ -283,14 +297,16 @@ public class GraphEntityService {
             p.put("severity",  e.getSeverity());
             p.put("now",       now.toString());
             p.put("eventId",   eventId);
+            p.put("tenantId", tl);
 
-            neo4jClient.query("MERGE (h:Host {hostname: $hostname})").bindAll(p).run();
+            neo4jClient.query("MERGE (h:Host {tenantId: $tenantId, hostname: $hostname})").bindAll(p).run();
 
             if (targetIp != null) {
                 p.put("address", targetIp);
+                
                 neo4jClient.query("""
-                        MATCH (h:Host {hostname: $hostname})
-                        MERGE (ip:IP {address: $address})
+                        MATCH (h:Host {tenantId: $tenantId, hostname: $hostname})
+                        MERGE (ip:IP {tenantId: $tenantId, address: $address})
                         MERGE (ip)-[r:TARGETED_AT]->(h)
                         ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1,
                                       r.alertName = $alertName, r.severity = $severity,
@@ -308,14 +324,15 @@ public class GraphEntityService {
             p.put("severity",  e.getSeverity());
             p.put("now",       now.toString());
             p.put("eventId",   eventId);
+            p.put("tenantId", tl);
 
-            neo4jClient.query("MERGE (d:Domain {name: $domain})").bindAll(p).run();
+            neo4jClient.query("MERGE (d:Domain {tenantId: $tenantId, name: $domain})").bindAll(p).run();
 
             if (targetIp != null) {
                 p.put("address", targetIp);
                 neo4jClient.query("""
-                        MATCH (d:Domain {name: $domain})
-                        MERGE (ip:IP {address: $address})
+                        MATCH (d:Domain {tenantId: $tenantId, name: $domain})
+                        MERGE (ip:IP {tenantId: $tenantId, address: $address})
                         MERGE (ip)-[r:RESOLVES_TO]->(d)
                         ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1,
                                       r.firstEventId = $eventId, r.lastEventId = $eventId
@@ -332,13 +349,14 @@ public class GraphEntityService {
             p.put("url",     targetUrl);
             p.put("now",     now.toString());
             p.put("eventId", eventId);
-            neo4jClient.query("MERGE (:Url {url: $url})").bindAll(p).run();
+            p.put("tenantId", tl);
+            neo4jClient.query("MERGE (:Url {tenantId: $tenantId, url: $url})").bindAll(p).run();
 
             if (targetIp != null) {
                 p.put("address", targetIp);
                 neo4jClient.query("""
-                        MATCH (ip:IP {address: $address})
-                        MERGE (u:Url {url: $url})
+                        MATCH (ip:IP {tenantId: $tenantId, address: $address})
+                        MERGE (u:Url {tenantId: $tenantId, url: $url})
                         MERGE (ip)-[r:ACCESSED]->(u)
                         """ + REL_UPSERT).bindAll(p).run();
             }
@@ -351,15 +369,16 @@ public class GraphEntityService {
             p.put("name",    targetProcess);
             p.put("now",     now.toString());
             p.put("eventId", eventId);
-            neo4jClient.query("MERGE (:Process {name: $name})").bindAll(p).run();
+            p.put("tenantId", tl);
+            neo4jClient.query("MERGE (:Process {tenantId: $tenantId, name: $name})").bindAll(p).run();
 
             if (targetHost != null) {
                 p.put("hostname", targetHost);
                 neo4jClient.query("""
-                        MATCH (proc:Process {name: $name})
-                        MERGE (h:Host {hostname: $hostname})
+                        MATCH (proc:Process {tenantId: $tenantId, name: $name})
+                        MERGE (h:Host {tenantId: $tenantId, hostname: $hostname})
                         MERGE (proc)-[r:EXECUTED_ON]->(h)
-                        """ + REL_UPSERT).bindAll(p).run();
+                        """+ REL_UPSERT).bindAll(p).run();
             }
         }
 
@@ -371,13 +390,14 @@ public class GraphEntityService {
             p.put("resourceId", targetCloudResourceId);
             p.put("now",        now.toString());
             p.put("eventId",    eventId);
-            neo4jClient.query("MERGE (:CloudResource {resourceId: $resourceId})").bindAll(p).run();
+            p.put("tenantId", tl);
+            neo4jClient.query("MERGE (:CloudResource {tenantId: $tenantId, resourceId: $resourceId})").bindAll(p).run();
 
             if (targetUser != null) {
                 p.put("username", targetUser);
                 neo4jClient.query("""
-                        MATCH (u:User {username: $username})
-                        MERGE (cr:CloudResource {resourceId: $resourceId})
+                        MATCH (u:User {tenantId: $tenantId, username: $username})
+                        MERGE (cr:CloudResource {tenantId: $tenantId, resourceId: $resourceId})
                         MERGE (u)-[r:ACCESSED]->(cr)
                         """ + REL_UPSERT).bindAll(p).run();
             }
@@ -390,13 +410,14 @@ public class GraphEntityService {
             p.put("address", targetEmail);
             p.put("now",     now.toString());
             p.put("eventId", eventId);
-            neo4jClient.query("MERGE (:Email {address: $address})").bindAll(p).run();
+            p.put("tenantId", tl);
+            neo4jClient.query("MERGE (:Email {tenantId: $tenantId, address: $address})").bindAll(p).run();
 
             if (targetUser != null) {
                 p.put("username", targetUser);
                 neo4jClient.query("""
-                        MATCH (u:User {username: $username})
-                        MERGE (em:Email {address: $address})
+                        MATCH (u:User {tenantId: $tenantId, username: $username})
+                        MERGE (em:Email {tenantId: $tenantId, address: $address})
                         MERGE (u)-[r:HAS_EMAIL]->(em)
                         """ + REL_UPSERT).bindAll(p).run();
             }
@@ -409,15 +430,16 @@ public class GraphEntityService {
             p.put("cveId",   targetCve);
             p.put("now",     now.toString());
             p.put("eventId", eventId);
-            neo4jClient.query("MERGE (:Cve {cveId: $cveId})").bindAll(p).run();
+            p.put("tenantId", tl);
+            neo4jClient.query("MERGE (:Cve {tenantId: $tenantId, cveId: $cveId})").bindAll(p).run();
 
             if (targetHost != null) {
                 p.put("hostname", targetHost);
                 neo4jClient.query("""
-                        MATCH (cve:Cve {cveId: $cveId})
-                        MERGE (h:Host {hostname: $hostname})
+                        MATCH (cve:Cve {tenantId: $tenantId, cveId: $cveId})
+                        MERGE (h:Host {tenantId: $tenantId, hostname: $hostname})
                         MERGE (cve)-[r:AFFECTS]->(h)
-                        """ + REL_UPSERT).bindAll(p).run();
+                        """+ REL_UPSERT).bindAll(p).run();
             }
         }
     }
