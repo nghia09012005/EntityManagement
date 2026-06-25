@@ -52,7 +52,8 @@ class FileIngestionServiceTest {
         verify(kafkaTemplate, times(2)).send(eq("raw-logs"), captor.capture());
 
         assertThat(captor.getAllValues().get(0)).contains("\"tenantId\":\"tenant-1\"");
-        assertThat(captor.getAllValues().get(0)).contains("\"user\":\"admin\"");
+        // payload is JSON-encoded inside the envelope, so quotes are escaped
+        assertThat(captor.getAllValues().get(0)).contains("user").contains("admin");
     }
 
     @Test

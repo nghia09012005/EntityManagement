@@ -54,10 +54,7 @@ public class GraphEntityService {
                           r.lastEventId = $eventId
             """;
 
-    /** Chuyển tenantId (UUID) thành Neo4j label an toàn: T_abc_123 */
-    static String tenantLabel(String tenantId) {
-        // if (tenantId == null || tenantId.isBlank()) return "T_default";
-        // return "T_" + tenantId.replace("-", "_");
+    public static String tenantLabel(String tenantId) {
         return tenantId;
     }
 

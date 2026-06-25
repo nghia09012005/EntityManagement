@@ -16,6 +16,7 @@ import org.springframework.data.neo4j.core.Neo4jClient;
 
 import java.time.LocalDateTime;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
@@ -430,5 +431,29 @@ class GraphEntityServiceTest {
         event.setTimestamp(LocalDateTime.now());
         service.save(event);
         verify(neo4jClient, atLeastOnce()).query(anyString());
+    }
+
+    // ── tenantLabel ───────────────────────────────────────────────────────────
+
+    @Test
+    void tenantLabel_returnsTenantIdAsIs() {
+        String id = "abc-123-def";
+        assertThat(GraphEntityService.tenantLabel(id)).isEqualTo(id);
+    }
+
+    @Test
+    void tenantLabel_nullReturnsNull() {
+        assertThat(GraphEntityService.tenantLabel(null)).isNull();
+    }
+
+    @Test
+    void tenantLabel_blankReturnsBlank() {
+        assertThat(GraphEntityService.tenantLabel("  ")).isEqualTo("  ");
+    }
+
+    @Test
+    void tenantLabel_uuidReturnedUnchanged() {
+        String uuid = "550e8400-e29b-41d4-a716-446655440000";
+        assertThat(GraphEntityService.tenantLabel(uuid)).isEqualTo(uuid);
     }
 }

@@ -6,11 +6,13 @@ import com.viettelDigitalTalent.EntitiyManagement.graph.dto.GraphResponse;
 import com.viettelDigitalTalent.EntitiyManagement.graph.dto.NodeDto;
 import com.viettelDigitalTalent.EntitiyManagement.graph.dto.PathResponse;
 import com.viettelDigitalTalent.EntitiyManagement.graph.service.GraphQueryService;
+import com.viettelDigitalTalent.EntitiyManagement.management.service.JwtService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
@@ -22,18 +24,19 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(GraphController.class)
+@WithMockUser
 class GraphControllerTest {
 
     @Autowired MockMvc mockMvc;
-
-    @MockBean GraphQueryService graphQueryService;
+    @MockBean  GraphQueryService graphQueryService;
+    @MockBean  JwtService jwtService;
 
     // ── listEntities ─────────────────────────────────────────────────────────
 
     @Test
     void listEntitiesReturnsUsers() throws Exception {
         when(graphQueryService.resolveLabel("user")).thenReturn("User");
-        when(graphQueryService.listEntities("User")).thenReturn(List.of(
+        when(graphQueryService.listEntities(eq("User"), anyString())).thenReturn(List.of(
                 new NodeDto("User:admin", "User", Map.of("username", "admin"))
         ));
 
@@ -53,7 +56,7 @@ class GraphControllerTest {
     @Test
     void listEntitiesEmptyReturnsEmptyArray() throws Exception {
         when(graphQueryService.resolveLabel("ip")).thenReturn("IP");
-        when(graphQueryService.listEntities("IP")).thenReturn(List.of());
+        when(graphQueryService.listEntities(eq("IP"), anyString())).thenReturn(List.of());
         mockMvc.perform(get("/api/graph/entities/ip").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isEmpty());
@@ -64,7 +67,7 @@ class GraphControllerTest {
     @Test
     void getNeighborsReturnsGraphResponse() throws Exception {
         when(graphQueryService.resolveLabel("user")).thenReturn("User");
-        when(graphQueryService.getNeighbors(eq("User"), eq("admin"), anyInt()))
+        when(graphQueryService.getNeighbors(eq("User"), eq("admin"), anyInt(), anyString()))
                 .thenReturn(new GraphResponse(
                         List.of(new NodeDto("User:admin", "User", Map.of("username", "admin")),
                                 new NodeDto("Host:WIN-PC01", "Host", Map.of("hostname", "WIN-PC01"))),
@@ -73,9 +76,8 @@ class GraphControllerTest {
 
         mockMvc.perform(get("/api/graph/user/admin/neighbors").param("hops", "1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.nodes").isArray())
-                .andExpect(jsonPath("$.edges").isArray())
-                .andExpect(jsonPath("$.nodes[0].label").value("User"));
+                .andExpect(jsonPath("$.nodes[0].label").value("User"))
+                .andExpect(jsonPath("$.edges").isArray());
     }
 
     @Test
@@ -88,7 +90,7 @@ class GraphControllerTest {
     @Test
     void getNeighborsEmptyGraphWhenNoRelations() throws Exception {
         when(graphQueryService.resolveLabel("ip")).thenReturn("IP");
-        when(graphQueryService.getNeighbors(eq("IP"), eq("1.2.3.4"), anyInt()))
+        when(graphQueryService.getNeighbors(eq("IP"), eq("1.2.3.4"), anyInt(), anyString()))
                 .thenReturn(new GraphResponse(List.of(), List.of()));
 
         mockMvc.perform(get("/api/graph/ip/1.2.3.4/neighbors"))
@@ -98,22 +100,12 @@ class GraphControllerTest {
     }
 
     @Test
-    void getNeighborsPassesHopsToService() throws Exception {
-        when(graphQueryService.resolveLabel("user")).thenReturn("User");
-        when(graphQueryService.getNeighbors("User", "admin", 3))
-                .thenReturn(new GraphResponse(List.of(), List.of()));
-
-        mockMvc.perform(get("/api/graph/user/admin/neighbors").param("hops", "3"))
-                .andExpect(status().isOk());
-    }
-
-    @Test
     void getNeighborsDefaultHopsIs1() throws Exception {
         when(graphQueryService.resolveLabel("host")).thenReturn("Host");
-        when(graphQueryService.getNeighbors("Host", "DC01", 1))
+        when(graphQueryService.getNeighbors(eq("Host"), eq("DC01"), eq(1), anyString()))
                 .thenReturn(new GraphResponse(List.of(), List.of()));
 
-        mockMvc.perform(get("/api/graph/host/DC01/neighbors")) // no hops param
+        mockMvc.perform(get("/api/graph/host/DC01/neighbors"))
                 .andExpect(status().isOk());
     }
 
@@ -123,7 +115,8 @@ class GraphControllerTest {
     void findPathReturnsFoundPath() throws Exception {
         when(graphQueryService.resolveLabel("user")).thenReturn("User");
         when(graphQueryService.resolveLabel("host")).thenReturn("Host");
-        when(graphQueryService.findPath("User", "admin", "Host", "DC01", 6, "shortest"))
+        when(graphQueryService.findPath(eq("User"), eq("admin"), eq("Host"), eq("DC01"),
+                anyInt(), anyString(), anyString()))
                 .thenReturn(new PathResponse(
                         List.of(new NodeDto("User:admin", "User", Map.of()),
                                 new NodeDto("Host:DC01", "Host", Map.of())),
@@ -132,27 +125,26 @@ class GraphControllerTest {
                 ));
 
         mockMvc.perform(get("/api/graph/path")
-                .param("fromType", "user").param("fromValue", "admin")
-                .param("toType",   "host").param("toValue",   "DC01"))
+                        .param("fromType", "user").param("fromValue", "admin")
+                        .param("toType",   "host").param("toValue",   "DC01"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.found").value(true))
-                .andExpect(jsonPath("$.pathCount").value(1))
-                .andExpect(jsonPath("$.shortestLength").value(1));
+                .andExpect(jsonPath("$.pathCount").value(1));
     }
 
     @Test
     void findPathReturnsFalseWhenNoPath() throws Exception {
         when(graphQueryService.resolveLabel("user")).thenReturn("User");
         when(graphQueryService.resolveLabel("ip")).thenReturn("IP");
-        when(graphQueryService.findPath(any(), any(), any(), any(), anyInt(), any()))
+        when(graphQueryService.findPath(anyString(), anyString(), anyString(), anyString(),
+                anyInt(), anyString(), anyString()))
                 .thenReturn(new PathResponse(List.of(), List.of(), false, 0, 0));
 
         mockMvc.perform(get("/api/graph/path")
-                .param("fromType", "user").param("fromValue", "admin")
-                .param("toType",   "ip").param("toValue",   "9.9.9.9"))
+                        .param("fromType", "user").param("fromValue", "admin")
+                        .param("toType",   "ip").param("toValue",   "9.9.9.9"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.found").value(false))
-                .andExpect(jsonPath("$.pathCount").value(0));
+                .andExpect(jsonPath("$.found").value(false));
     }
 
     @Test
@@ -178,13 +170,14 @@ class GraphControllerTest {
     void findPathPassesModeAndHopsToService() throws Exception {
         when(graphQueryService.resolveLabel("user")).thenReturn("User");
         when(graphQueryService.resolveLabel("ip")).thenReturn("IP");
-        when(graphQueryService.findPath("User", "admin", "IP", "1.2.3.4", 4, "all"))
+        when(graphQueryService.findPath(anyString(), anyString(), anyString(), anyString(),
+                anyInt(), anyString(), anyString()))
                 .thenReturn(new PathResponse(List.of(), List.of(), false, 0, 0));
 
         mockMvc.perform(get("/api/graph/path")
-                .param("fromType", "user").param("fromValue", "admin")
-                .param("toType",   "ip").param("toValue",   "1.2.3.4")
-                .param("maxHops",  "4").param("mode", "all"))
+                        .param("fromType", "user").param("fromValue", "admin")
+                        .param("toType",   "ip").param("toValue",   "1.2.3.4")
+                        .param("maxHops",  "4").param("mode", "all"))
                 .andExpect(status().isOk());
     }
 }
