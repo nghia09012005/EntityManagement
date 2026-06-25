@@ -17,6 +17,7 @@ import org.springframework.data.neo4j.core.Neo4jClient;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
@@ -227,15 +228,16 @@ class GraphEntityServiceTest {
     }
 
     @Test
-    void save_doesNotThrowOnException() {
+    void save_propagatesException() {
         when(neo4jClient.query(anyString())).thenThrow(new RuntimeException("Neo4j down"));
 
         AuthenticationEvent event = new AuthenticationEvent();
         event.setUsername("admin");
         event.setWorkstation("WIN-PC01");
 
-        // should not propagate exception
-        service.save(event);
+        assertThatThrownBy(() -> service.save(event))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Neo4j down");
     }
 
     @Test

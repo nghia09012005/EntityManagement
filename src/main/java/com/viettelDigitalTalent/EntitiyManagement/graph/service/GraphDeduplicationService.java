@@ -50,11 +50,13 @@ public class GraphDeduplicationService {
                 WITH u2, split(u2.username, '@')[0] AS prefix
                 MATCH (u1:User {username: prefix})
                 WHERE u1 <> u2
+                  AND u1.tenantId = u2.tenantId
                   AND NOT (u1)-[:SAME_AS]-(u2)
                 MERGE (u1)-[r:SAME_AS]->(u2)
                 ON CREATE SET r.confidence = 0.85,
                               r.reason     = 'email_prefix',
-                              r.detectedAt = $now
+                              r.detectedAt = $now,
+                              r.tenantId   = u2.tenantId
                 RETURN u1.username AS fromVal, u2.username AS toVal
                 """)
                 .bind(nowStr).to("now")
@@ -80,11 +82,13 @@ public class GraphDeduplicationService {
                 WITH h2, split(h2.hostname, '.')[0] AS shortname
                 MATCH (h1:Host {hostname: shortname})
                 WHERE h1 <> h2
+                  AND h1.tenantId = h2.tenantId
                   AND NOT (h1)-[:SAME_AS]-(h2)
                 MERGE (h1)-[r:SAME_AS]->(h2)
                 ON CREATE SET r.confidence = 0.80,
                               r.reason     = 'fqdn_shortname',
-                              r.detectedAt = $now
+                              r.detectedAt = $now,
+                              r.tenantId   = h2.tenantId
                 RETURN h1.hostname AS fromVal, h2.hostname AS toVal
                 """)
                 .bind(nowStr).to("now")

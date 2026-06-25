@@ -73,6 +73,7 @@ public class GraphEntityService {
             neo4jSample.stop(neo4jTimer);
         } catch (Exception e) {
             log.error("[Graph] Lỗi khi lưu entity cho event {}: {}", event.getEventId(), e.getMessage(), e);
+            throw e;
         }
     }
 
@@ -185,7 +186,7 @@ public class GraphEntityService {
                     ph.put("eventId",  eventId);
                     ph.put("tenantId", tl);
                     neo4jClient.query("""
-                            MATCH (proc:Process: {tenantId: $tenantId, name: $name})
+                            MATCH (proc:Process {tenantId: $tenantId, name: $name})
                             MERGE (h:Host {tenantId: $tenantId, hostname: $hostname})
                             MERGE (proc)-[r:EXECUTED_ON]->(h)
                             """ + REL_UPSERT).bindAll(ph).run();
