@@ -1,6 +1,12 @@
 # SOC Entity Management
 
-Nền tảng SOC thu thập log từ nhiều nguồn, chuẩn hóa, làm giàu dữ liệu qua pipeline Kafka, và lưu thành **entity graph** trong Neo4j để phân tích quan hệ tấn công.
+Hệ thống là một nền tảng quản lý và phân tích thực thể an ninh mạng (Security Entity Intelligence Platform) được thiết kế nhằm hỗ trợ Security Operations Center (SOC) trong việc thu thập, chuẩn hóa, làm giàu và phân tích dữ liệu bảo mật từ nhiều nguồn khác nhau.
+
+Nền tảng tiếp nhận log, alert và sự kiện bảo mật từ các hệ thống như EDR, SIEM, Firewall, IDS/IPS và Cloud Audit Logs. Dữ liệu sau khi được thu thập sẽ đi qua kiến trúc xử lý theo hướng event-driven sử dụng Kafka, nơi các sự kiện được chuẩn hóa định dạng, trích xuất thực thể (Entity Extraction), làm giàu thông tin (Enrichment) và xây dựng các mối quan hệ bảo mật.
+
+Các thực thể như User, Host, IP Address, Domain và File Hash được lưu trữ dưới dạng đồ thị trong Neo4j, cho phép mô hình hóa các mối quan hệ và hành vi liên quan đến tấn công mạng. Thông qua cơ sở dữ liệu đồ thị, hệ thống hỗ trợ truy vết chuỗi tấn công, phân tích liên kết giữa các thực thể, xác định điểm xâm nhập và hỗ trợ điều tra sự cố an ninh hiệu quả hơn.
+
+Bên cạnh đó, nền tảng cung cấp khả năng trực quan hóa quan hệ dưới dạng graph, hỗ trợ tìm kiếm và truy vấn đa bước giữa các thực thể, giúp chuyên gia SOC nhanh chóng phát hiện các mẫu hành vi bất thường và đánh giá phạm vi ảnh hưởng của một sự kiện bảo mật.
 
 **Tech stack:** Java 21 · Spring Boot 3.5 · React + Vite · Kafka · MongoDB · Neo4j · Redis · MinIO
 
@@ -8,7 +14,7 @@ Nền tảng SOC thu thập log từ nhiều nguồn, chuẩn hóa, làm giàu d
 
 ## Kiến trúc hệ thống
 
-```
+<!-- ```
   Browser / API Client
          │
          │  POST /api/v1/ingest   (text/plain — free text)
@@ -56,7 +62,9 @@ Nền tảng SOC thu thập log từ nhiều nguồn, chuẩn hóa, làm giàu d
 
   Background job (mỗi ~2 phút):
   GraphDeduplicationService → SAME_AS links + MongoDB: graph_dedup_log
-```
+``` -->
+
+![Architecture](EntityMngArch.png)
 
 ---
 
