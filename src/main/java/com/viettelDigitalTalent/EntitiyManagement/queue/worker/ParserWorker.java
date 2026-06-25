@@ -49,7 +49,8 @@ public class ParserWorker {
                 .register(meterRegistry);
     }
 
-    @KafkaListener(topics = KafkaTopicConstants.RAW_LOGS, groupId = "soc-parser-group")
+    @KafkaListener(topics = KafkaTopicConstants.RAW_LOGS, groupId = "soc-parser-group",
+            concurrency = "3")
     public void consume(ConsumerRecord<String, String> record) {
         String source  = record.key();
         String rawJson = record.value();

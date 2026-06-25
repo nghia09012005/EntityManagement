@@ -8,11 +8,16 @@ import com.viettelDigitalTalent.EntitiyManagement.queue.publisher.DeadLetterPubl
 import com.viettelDigitalTalent.EntitiyManagement.storage.repository.AuditLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.stream.Collectors;
 
 // @Slf4j
 // @Service
@@ -73,14 +78,15 @@ public class EnrichmentWorker {
     private final DeadLetterPublisher deadLetterPublisher;
     
     // Inject custom executor để kiểm soát số lượng luồng
-    @Qualifier("enrichmentExecutor") 
+    @Qualifier("enrichmentExecutor")
     private final Executor executor;
 
     private static final String[] ENRICHMENT_KEYS = {
         "geo", "malware", "srcGeo", "dstGeo", "ipIntel", "srcIpIntel", "dstIpIntel"
     };
 
-    @KafkaListener(topics = KafkaTopicConstants.NORMALIZED_EVENTS, groupId = "soc-enrichment-group")
+    @KafkaListener(topics = KafkaTopicConstants.NORMALIZED_EVENTS, groupId = "soc-enrichment-group",
+            concurrency = "3")
     public void consume(String payload) {
         // Chỉ cần 1 khối try-catch để bắt lỗi parse JSON ban đầu
         try {

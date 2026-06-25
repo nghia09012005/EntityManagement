@@ -19,7 +19,8 @@ public class GraphWorker {
     private final ObjectMapper objectMapper;
     private final DeadLetterPublisher deadLetterPublisher;
 
-    @KafkaListener(topics = KafkaTopicConstants.NORMALIZED_EVENTS, groupId = "soc-graph-group")
+    @KafkaListener(topics = KafkaTopicConstants.NORMALIZED_EVENTS, groupId = "soc-graph-group",
+            concurrency = "3")
     public void consume(String payload) {
         try {
             BaseEvent event = objectMapper.readValue(payload, BaseEvent.class);
