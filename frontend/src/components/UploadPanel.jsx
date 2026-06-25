@@ -97,7 +97,7 @@ export default function UploadPanel({ onUploaded }) {
             value={alertText}
             onChange={(e) => { setAlertText(e.target.value); setAlertStatus(null) }}
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleSendAlert() }}
-            placeholder="Mô tả alert bằng ngôn ngữ tự nhiên, ví dụ: Phát hiện đăng nhập đáng ngờ từ IP 192.168.1.100 lúc 3 giờ sáng vào máy chủ SRV-DC01..."
+            placeholder="Nhập log dạng free-text hoặc JSON đều được. Ví dụ free-text: Phát hiện đăng nhập đáng ngờ từ IP 192.168.1.100 lúc 3 giờ sáng vào máy chủ SRV-DC01... Hoặc dán trực tiếp JSON log/event vào đây."
             style={{
               width: '100%', minHeight: 90, resize: 'vertical',
               background: '#0d1117', color: '#c9d1d9',
