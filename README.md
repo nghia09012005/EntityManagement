@@ -68,6 +68,118 @@ Bên cạnh đó, nền tảng cung cấp khả năng trực quan hóa quan hệ
 
 ---
 
+
+## Workflow
+
+
+```
+                +------------------+
+                | API / File Upload|
+                +---------+--------+
+                          |
+                          v
+                +------------------+
+                |     MongoDB      |
+                | (Raw Log Store)  |
+                +------------------+
+                          |
+                          v
+                +------------------+
+                | Kafka: raw-logs  |
+                +------------------+
+                          |
+                          v
+                +------------------+
+                |   ParserWorker   |
+                +------------------+
+                          |
+                          v
+                +----------------------+
+                | Kafka: normalized-   |
+                |       events         |
+                +----------------------+
+                    |              |
+                    |              |
+                    v              v
+          +----------------+  +----------------+
+          |EnrichmentWorker|  |  GraphWorker   |
+          +----------------+  +----------------+
+                    |              |
+                    v              v
+          +----------------+  +----------------+
+          |    MongoDB     |  |     Neo4j      |
+          | Enrichment DB  |  | Entity Graph   |
+          +----------------+  +----------------+
+                                    |
+                                    v
+                    +---------------------------+
+                    | GraphDeduplicationService |
+                    |      (every 2 min)        |
+                    +---------------------------+
+                                    |
+                                    v
+                           SAME_AS Relationships
+                                    |
+                                    v
+                    +---------------------------+
+                    |      REST API / UI        |
+                    +---------------------------+
+                                    |
+                                    v
+                         Investigation & Hunting
+```
+
+
+1. **Ingestion**
+
+   * Nhận Logs/Alerts từ API hoặc File Upload.
+   * Lưu log gốc vào MongoDB.
+   * Đẩy log vào Kafka topic `raw-logs`.
+
+2. **Normalization & Entity Extraction**
+
+   * ParserWorker đọc dữ liệu từ `raw-logs`.
+   * Chuẩn hóa dữ liệu (trim, lowercase, chuẩn hóa field).
+   * Trích xuất các entity:
+
+     * User
+     * IP Address
+     * Hostname
+     * Domain
+     * File
+     * URL
+   * Đẩy kết quả vào Kafka topic `normalized-events`.
+
+3. **Enrichment**
+
+   * EnrichmentWorker đọc từ `normalized-events`.
+   * Gọi các nguồn Threat Intelligence:
+
+     * VirusTotal
+     * AbuseIPDB
+     * GeoIP
+   * Lưu dữ liệu làm giàu vào MongoDB.
+
+4. **Graph Construction**
+
+   * GraphWorker đọc dữ liệu đã chuẩn hóa.
+   * Tạo Entity Nodes trong Neo4j.
+   * Tạo Relationship giữa các Entity.
+   * Chỉ lưu danh tính và quan hệ, không lưu enrichment data.
+
+5. **Deduplication**
+
+   * Chạy định kỳ mỗi 2 phút.
+   * Tìm các entity trùng lặp.
+   * Tạo quan hệ `SAME_AS`.
+   * Hỗ trợ điều tra xuyên nhiều nguồn log.
+
+
+
+
+
+
+
 ## Kafka Topics
 
 | Topic               | Producer          | Consumer                          |
@@ -95,20 +207,6 @@ Bên cạnh đó, nền tảng cung cấp khả năng trực quan hóa quan hệ
 
 > **Enrichment data** (country, ASN, abuseScore, threatLevel, verdict, family…) được lưu riêng trong MongoDB collection `audit_logs` (field `enrichment`). UI query qua `GET /api/enrichment/entity?type=ip&value=...` thay vì đọc từ Neo4j node properties.
 
-### Normalization (EntityNormalizer)
-
-| Loại      | Quy tắc                                                        |
-|-----------|----------------------------------------------------------------|
-| username  | lowercase; bỏ `DOMAIN\` prefix                                 |
-| ip        | bỏ `::ffff:` IPv4-mapped IPv6 prefix                           |
-| hash      | lowercase, trim                                                |
-| hostname  | lowercase, bỏ trailing `.`                                     |
-| domain    | lowercase, bỏ trailing `.`                                     |
-| url       | lowercase, bỏ trailing `/`                                     |
-| email     | lowercase, trim                                                |
-| cveId     | uppercase canonical (`CVE-YYYY-NNNNN`)                         |
-| processName | basename extraction (`C:\...\cmd.exe` → `cmd.exe`), lowercase |
-
 ---
 
 ## Relationships
@@ -134,6 +232,24 @@ Bên cạnh đó, nền tảng cung cấp khả năng trực quan hóa quan hệ
 Tất cả relationship đều có: `firstSeen`, `lastSeen`, `count`, `firstEventId`, `lastEventId`.
 
 ---
+
+
+
+### Normalization (EntityNormalizer)
+
+| Loại      | Quy tắc                                                        |
+|-----------|----------------------------------------------------------------|
+| username  | lowercase; bỏ `DOMAIN\` prefix                                 |
+| ip        | bỏ `::ffff:` IPv4-mapped IPv6 prefix                           |
+| hash      | lowercase, trim                                                |
+| hostname  | lowercase, bỏ trailing `.`                                     |
+| domain    | lowercase, bỏ trailing `.`                                     |
+| url       | lowercase, bỏ trailing `/`                                     |
+| email     | lowercase, trim                                                |
+| cveId     | uppercase canonical (`CVE-YYYY-NNNNN`)                         |
+| processName | basename extraction (`C:\...\cmd.exe` → `cmd.exe`), lowercase |
+
+
 
 ## Entity Deduplication (SAME_AS)
 
@@ -183,63 +299,66 @@ Mỗi link mới được ghi vào MongoDB collection `graph_dedup_log`.
 
 ```
 src/main/java/com/viettelDigitalTalent/EntitiyManagement/
-├── ingestion/              # Tiếp nhận log (REST API, file upload)
+├── common/                 # Utils chung
+│   └── utils/
+├── config/                 # Security, CORS, Kafka/Redis/MinIO/Neo4j/Async config
+├── enrichment/             # Làm giàu dữ liệu
+│   ├── core/               # EnrichmentService, EnrichmentProvider
+│   ├── dtos/               # GeoInfo, IpIntelInfo, MalwareInfo
+│   ├── geoip/              # GeoIP lookup
+│   ├── ipintel/            # AbuseIPDB, OTX, Whois, mock providers
+│   └── threatintel/        # VirusTotal, mock provider
+├── graph/                  # Neo4j entity graph
+│   ├── controller/         # GraphController
+│   ├── dto/                # NodeDto, EdgeDto, GraphResponse, PathResponse
+│   └── service/            # GraphEntityService, GraphQueryService, dedup, normalizer
+├── ingestion/              # Nhận log trực tiếp và file ingestion
 │   ├── controller/
 │   ├── dto/
 │   └── service/
-│
-├── queue/                  # Kafka pipeline
-│   ├── config/             # KafkaTopicConstants, KafkaTopicsConfig
-│   ├── publisher/          # DeadLetterPublisher
-│   └── worker/             # ParserWorker, EnrichmentWorker, GraphWorker
-│
-├── parser/                 # Chuẩn hóa log thô → BaseEvent
-│   ├── core/               # EventParser interface + dispatcher
-│   ├── windows/            # Windows Event Log parser
-│   ├── network/            # Network / firewall parser
-│   ├── process/            # Process / EDR parser
-│   └── alert/              # Generic alert parser
-│
+├── llm/                    # LLM fallback cho free-text
+│   └── core/               # Gemini, Groq, Mock, prompt, validator, process
+├── management/             # Auth, JWT, MinIO/file, enrichment/threat-intel APIs
+│   ├── controller/
+│   ├── dto/
+│   ├── filter/
+│   └── service/
 ├── normalize/              # Event data models
-│   ├── base/               # BaseEvent (@JsonTypeInfo polymorphism)
-│   ├── event/              # AuthenticationEvent, ProcessEvent, NetworkEvent
-│   └── alert/              # AlertEvent (10 target fields)
-│
-├── enrichment/             # Làm giàu dữ liệu
-│   ├── core/               # EnrichmentService dispatcher
-│   ├── geoip/              # GeoIP lookup (Redis cache)
-│   ├── ipintel/            # AbuseIPDB + OTX
-│   └── threatintel/        # VirusTotal
-│
-├── graph/                  # Neo4j entity graph
-│   ├── controller/         # GraphController (REST API)
-│   ├── service/            # GraphEntityService, GraphQueryService
-│   │                       # GraphDeduplicationService, EntityNormalizer
-│   └── dto/                # NodeDto, EdgeDto, GraphResponse, PathResponse
-│
-├── llm/                    # LLM fallback chain
-│   ├── core/               # LLM client interface + factory
-│   └── llmFilter/          # Gemini / Groq / Mock clients
-│
-├── storage/
-│   ├── mongodb/            # AuditLog, GraphDedupLog documents
-│   └── repository/         # MongoRepository interfaces
-│
-├── detection/              # Rule-based detection engine
-├── management/             # CRUD API (rules, assets)
-└── common/                 # Exception handling, utils
+│   ├── alert/
+│   ├── base/
+│   └── event/
+├── parser/                 # Parser raw log -> BaseEvent
+│   ├── alert/
+│   ├── core/
+│   ├── network/
+│   ├── process/
+│   └── windows/
+├── queue/                  # Kafka topics, publisher, workers, DLQ controller
+│   ├── config/
+│   ├── controller/
+│   ├── publisher/
+│   └── worker/
+└── storage/                # MongoDB documents + repositories
+    ├── mongodb/
+    └── repository/
 
 frontend/src/
 ├── pages/
-│   ├── HomePage.jsx         # Danh sách entity + Upload panel
-│   ├── EntityDetailPage.jsx # Chi tiết node + Enrichment + Relationships
-│   └── GraphPage.jsx        # GraphView + PathFinder
+│   ├── LoginPage.jsx
+│   ├── RegisterPage.jsx
+│   ├── EntityListPage.jsx      # Danh sách entity
+│   ├── EntityDetailPage.jsx    # Chi tiết entity + graph neighbors/enrichment
+│   ├── PathFinderPage.jsx      # Tìm attack path
+│   └── DlqPage.jsx             # Dead letter queue UI
 ├── components/
-│   ├── EntityBadge.jsx      # Color-coded entity badge (10 types)
-│   ├── GraphView.jsx        # Canvas graph visualization
-│   ├── PathFinder.jsx       # Attack path search UI
-│   └── UploadPanel.jsx      # File upload + Free text alert input
-└── api.js                   # Fetch wrappers cho tất cả backend API
+│   ├── EntityBadge.jsx
+│   ├── GraphView.jsx
+│   └── UploadPanel.jsx         # File upload + free-text/JSON input
+├── api.js                      # Fetch wrappers chính cho frontend
+├── App.jsx                     # Router + protected routes + navbar
+├── App.css
+├── index.css
+└── main.jsx
 ```
 
 ---
