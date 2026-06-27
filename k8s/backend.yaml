@@ -20,11 +20,20 @@ spec:
           ports:
             - containerPort: 8080
           env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-Xmx512m -Dspring.main.banner-mode=off -Ddebug=true"
+            - name: JAVA_TOOL_OPTIONS
+              value: "-Xmx512m -XX:MaxRAMPercentage=75.0"
             # Mount thêm config K8s vào Spring Boot
             - name: SPRING_CONFIG_ADDITIONAL_LOCATION
               value: file:/app/config/
             - name: SPRING_PROFILES_ACTIVE
               value: k8s
+            # Ép biến môi trường để override code hard-code localhost
+            - name: MINIO_ENDPOINT
+              value: "http://minio:9000"
+            - name: SPRING_DATA_NEO4J_URI
+              value: "bolt://neo4j:7687"
           volumeMounts:
             - name: config
               mountPath: /app/config
@@ -48,6 +57,9 @@ spec:
         - name: config
           configMap:
             name: backend-config
+        - name: geoip-data
+          hostPath:
+            path: /data/geoip
 ---
 apiVersion: v1
 kind: Service

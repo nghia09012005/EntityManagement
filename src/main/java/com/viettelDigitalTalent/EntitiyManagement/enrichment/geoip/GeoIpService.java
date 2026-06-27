@@ -1,5 +1,6 @@
 package com.viettelDigitalTalent.EntitiyManagement.enrichment.geoip;
 
+import com.maxmind.db.Reader;
 import com.maxmind.geoip2.DatabaseReader;
 import com.maxmind.geoip2.model.AsnResponse;
 import com.maxmind.geoip2.model.CityResponse;

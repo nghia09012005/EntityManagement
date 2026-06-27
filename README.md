@@ -632,9 +632,11 @@ helm install kafka bitnami/kafka -n soc \
   --set listeners.client.protocol=PLAINTEXT \
   --set controller.replicaCount=1
 
-helm install neo4j neo4j/neo4j -n soc \
-  --set neo4j.password=password123 \
-  --set volumes.data.mode=defaultStorageClass
+helm install neo4j bitnami/neo4j -n soc \
+  --set auth.password=password123 \
+  --set volumePermissions.enabled=true \
+  --set resources.limits.cpu=500m \
+  --set resources.limits.memory=1Gi
 
 helm install minio bitnami/minio -n soc \
   --set auth.rootUser=admin \

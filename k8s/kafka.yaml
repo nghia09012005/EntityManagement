@@ -51,6 +51,7 @@ spec:
       labels:
         app: kafka
     spec:
+      enableServiceLinks: false
       containers:
         - name: kafka
           image: confluentinc/cp-kafka:7.5.0
@@ -60,25 +61,30 @@ spec:
             - name: KAFKA_BROKER_ID
               value: "1"
             - name: KAFKA_ZOOKEEPER_CONNECT
-              value: zookeeper:2181
-            # Listener nội bộ K8s dùng port 29092, tên "PLAINTEXT"
+              value: "zookeeper:2181"
+            # Cấu hình chuẩn cho Kafka 7.5.0
+            - name: KAFKA_LISTENERS
+              value: "PLAINTEXT://0.0.0.0:29092"
             - name: KAFKA_ADVERTISED_LISTENERS
-              value: PLAINTEXT://kafka:29092
+              value: "PLAINTEXT://kafka:29092"
             - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
-              value: PLAINTEXT:PLAINTEXT
+              value: "PLAINTEXT:PLAINTEXT"
             - name: KAFKA_INTER_BROKER_LISTENER_NAME
-              value: PLAINTEXT
+              value: "PLAINTEXT"
             - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
               value: "1"
+            # Thêm dòng này để ép nó không kiểm tra các biến cũ nữa
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "true"
           resources:
             requests: { memory: "512Mi", cpu: "200m" }
             limits:   { memory: "1Gi",   cpu: "500m" }
           readinessProbe:
             exec:
               command:
-                - kafka-broker-api-versions.sh
-                - --bootstrap-server
-                - localhost:29092
+                - /bin/bash
+                - -c
+                - echo "" | nc -zv localhost 29092
             initialDelaySeconds: 30
             periodSeconds: 15
 ---
