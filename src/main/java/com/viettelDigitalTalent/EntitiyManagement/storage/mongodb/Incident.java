@@ -11,12 +11,13 @@ import java.util.List;
 import java.util.Map;
 
 @Document(collection = "incidents")
-@CompoundIndex(name = "pattern_window_idx", def = "{'patternName': 1, 'windowStart': 1}", unique = true)
+@CompoundIndex(name = "pattern_window_tenant_idx", def = "{'patternName': 1, 'windowStart': 1, 'tenantId': 1}", unique = true)
 @Data
 @NoArgsConstructor
 public class Incident {
     @Id
     private String id;
+    private String tenantId;
     private String patternName;
     private String mitreId;
     private String title;

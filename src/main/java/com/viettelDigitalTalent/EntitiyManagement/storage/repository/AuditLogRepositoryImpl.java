@@ -24,10 +24,11 @@ public class AuditLogRepositoryImpl implements AuditLogRepository {
     private MongoTemplate mongoTemplate;
 
     @Override
-    public void saveRawLog(String eventId, String source, String category, LocalDateTime timestamp,
+    public void saveRawLog(String eventId, String tenantId, String source, String category, LocalDateTime timestamp,
                            Map<String, Object> rawData, String rawEvent) {
         Query query = new Query(Criteria.where("eventId").is(eventId));
         Update update = new Update()
+                .set("tenantId", tenantId)
                 .set("source", source)
                 .set("category", category)
                 .set("timestamp", timestamp)
@@ -64,10 +65,19 @@ public class AuditLogRepositoryImpl implements AuditLogRepository {
     }
 
     @Override
-    public Page<AuditLog> findAlerts(Pageable pageable) {
-        Criteria criteria = new Criteria().orOperator(
-                Criteria.where("category").is("THREAT"),
-                Criteria.where("category").is("SECURITY_FINDING")
+    public List<AuditLog> findRecentEvents(LocalDateTime since, String tenantId) {
+        Query query = new Query(Criteria.where("timestamp").gte(since).and("tenantId").is(tenantId))
+                .with(Sort.by(Sort.Direction.ASC, "timestamp"));
+        return mongoTemplate.find(query, AuditLog.class);
+    }
+
+    @Override
+    public Page<AuditLog> findAlerts(Pageable pageable, String tenantId) {
+        Criteria criteria = Criteria.where("tenantId").is(tenantId).andOperator(
+                new Criteria().orOperator(
+                        Criteria.where("category").is("THREAT"),
+                        Criteria.where("category").is("SECURITY_FINDING")
+                )
         );
         long total = mongoTemplate.count(new Query(criteria), AuditLog.class);
         Query query = new Query(criteria)
@@ -78,7 +88,9 @@ public class AuditLogRepositoryImpl implements AuditLogRepository {
     }
 
     @Override
-    public long countByCategory(String category) {
-        return mongoTemplate.count(new Query(Criteria.where("category").is(category)), AuditLog.class);
+    public long countByCategory(String category, String tenantId) {
+        Criteria criteria = Criteria.where("tenantId").is(tenantId)
+                .and("category").is(category);
+        return mongoTemplate.count(new Query(criteria), AuditLog.class);
     }
 }

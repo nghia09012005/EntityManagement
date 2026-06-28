@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -18,14 +19,16 @@ public class CorrelationService {
     private final List<CorrelationRule> rules;
     private final IncidentRepository incidentRepository;
 
-    public void evaluate(List<AuditLog> events, LocalDateTime windowStart) {
+    public void evaluate(List<AuditLog> events, LocalDateTime windowStart, String tenantId) {
         if (events.isEmpty()) return;
 
         for (CorrelationRule rule : rules) {
             try {
                 rule.evaluate(events, windowStart).ifPresent(incident -> {
-                    boolean exists = incidentRepository.existsByPatternNameAndWindowStart(
-                            incident.getPatternName(), windowStart);
+                    incident.setId(UUID.randomUUID().toString());
+                    incident.setTenantId(tenantId);
+                    boolean exists = incidentRepository.existsByPatternNameAndWindowStartAndTenantId(
+                            incident.getPatternName(), windowStart, tenantId);
                     if (!exists) {
                         incidentRepository.save(incident);
                         log.info("[Correlation] Incident mới: [{}] {}", incident.getSeverity(), incident.getTitle());

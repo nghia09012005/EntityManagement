@@ -21,6 +21,9 @@ public class DlqEvent {
     private String id;
 
     @Indexed
+    private String tenantId;
+
+    @Indexed
     private String sourceTopic;
 
     private String originalPayload;

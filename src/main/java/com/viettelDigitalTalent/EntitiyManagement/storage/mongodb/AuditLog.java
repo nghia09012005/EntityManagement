@@ -15,6 +15,7 @@ import java.util.Map;
 public class AuditLog {
     @Id
     private String eventId;
+    private String tenantId;
     private String source;
     private String category;
     private LocalDateTime timestamp;

@@ -36,9 +36,11 @@ public class DlqWorker {
             String originalPayload  = (String) msg.getOrDefault("originalPayload", "");
             String error            = (String) msg.getOrDefault("error", "unknown");
             String errorClass       = (String) msg.getOrDefault("errorClass", "Exception");
+            String tenantId         = extractTenantId(originalPayload);
 
             DlqEvent event = DlqEvent.builder()
                     .id(UUID.randomUUID().toString())
+                    .tenantId(tenantId)
                     .sourceTopic(sourceTopic)
                     .originalPayload(originalPayload)
                     .error(error)
@@ -59,5 +61,15 @@ public class DlqWorker {
         } catch (Exception e) {
             log.error("[DLQ] Failed to process DLQ message: {}", raw, e);
         }
+    }
+
+    private String extractTenantId(String payload) {
+        if (payload == null || payload.isBlank()) return "default";
+        try {
+            com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(payload);
+            com.fasterxml.jackson.databind.JsonNode tid = node.get("tenantId");
+            if (tid != null && !tid.isNull() && !tid.asText().isBlank()) return tid.asText();
+        } catch (Exception ignored) {}
+        return "default";
     }
 }

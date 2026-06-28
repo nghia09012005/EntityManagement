@@ -1,0 +1,15 @@
+{"eventType":"AUTHENTICATION","username":"jdoe","ipAddress":"10.0.1.50","workstation":"CORP-WS01","success":true,"timestamp":"2024-03-15T09:00:00Z"}
+{"eventType":"AUTHENTICATION","username":"jdoe@corp.local","ipAddress":"10.0.1.50","workstation":"CORP-WS01","success":true,"timestamp":"2024-03-15T09:01:00Z"}
+{"eventType":"AUTHENTICATION","username":"jdoe","ipAddress":"10.0.1.50","workstation":"CORP-WS01","success":true,"timestamp":"2024-03-15T09:15:00Z"}
+{"eventType":"AUTHENTICATION","username":"jdoe@corp.local","ipAddress":"10.0.1.50","workstation":"CORP-WS02","success":true,"timestamp":"2024-03-15T09:16:00Z"}
+{"eventType":"AUTHENTICATION","username":"svcaccount","ipAddress":"10.0.1.50","workstation":"SRV-DC01","success":true,"timestamp":"2024-03-15T09:02:00Z"}
+{"eventType":"AUTHENTICATION","username":"svcaccount","ipAddress":"10.0.1.50","workstation":"SRV-DC01.corp.local","success":true,"timestamp":"2024-03-15T09:03:00Z"}
+{"eventType":"AUTHENTICATION","username":"svcaccount","ipAddress":"10.0.2.11","workstation":"SRV-DC01","success":true,"timestamp":"2024-03-15T09:20:00Z"}
+{"eventType":"AUTHENTICATION","username":"svcaccount","ipAddress":"10.0.2.11","workstation":"SRV-DC01.corp.local","success":true,"timestamp":"2024-03-15T09:21:00Z"}
+{"eventType":"AUTHENTICATION","username":"alice","ipAddress":"192.168.1.20","workstation":"LAPTOP-ALICE","success":true,"timestamp":"2024-03-15T09:10:00Z"}
+{"eventType":"AUTHENTICATION","username":"alice@corp.local","ipAddress":"192.168.1.21","workstation":"LAPTOP-ALICE2","success":true,"timestamp":"2024-03-15T09:11:00Z"}
+{"eventType":"AUTHENTICATION","username":"bob","ipAddress":"172.16.0.5","workstation":"SRV-APP01","success":true,"timestamp":"2024-03-15T09:30:00Z"}
+{"eventType":"AUTHENTICATION","username":"bob@corp.local","ipAddress":"172.16.0.5","workstation":"SRV-APP01","success":true,"timestamp":"2024-03-15T09:31:00Z"}
+{"eventType":"AUTHENTICATION","username":"bob@corp.local","ipAddress":"172.16.0.5","workstation":"SRV-APP01.corp.local","success":true,"timestamp":"2024-03-15T09:32:00Z"}
+{"eventType":"ALERT","alertName":"Suspicious Login","severity":"MEDIUM","targetUser":"jdoe","targetIp":"10.0.1.50","targetHost":"CORP-WS01","timestamp":"2024-03-15T09:05:00Z"}
+{"eventType":"ALERT","alertName":"Suspicious Login","severity":"MEDIUM","targetUser":"jdoe@corp.local","targetIp":"10.0.1.50","targetHost":"CORP-WS01","timestamp":"2024-03-15T09:06:00Z"}

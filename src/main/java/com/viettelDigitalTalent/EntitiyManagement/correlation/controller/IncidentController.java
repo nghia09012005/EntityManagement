@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -32,9 +33,11 @@ public class IncidentController {
     @GetMapping
     public ResponseEntity<Page<Incident>> list(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
         return ResponseEntity.ok(
-                incidentRepository.findAllByOrderByDetectedAtDesc(PageRequest.of(page, size)));
+                incidentRepository.findAllByTenantIdOrderByDetectedAtDesc(
+                        tenantId(authentication), PageRequest.of(page, size)));
     }
 
     @PatchMapping("/{id}/status")
@@ -51,8 +54,9 @@ public class IncidentController {
     }
 
     @GetMapping("/stats")
-    public ResponseEntity<Map<String, Object>> stats() {
-        List<Incident> all = incidentRepository.findAll();
+    public ResponseEntity<Map<String, Object>> stats(Authentication authentication) {
+        String tenantId = tenantId(authentication);
+        List<Incident> all = incidentRepository.findAllByTenantId(tenantId);
 
         Map<String, Long> bySeverity = all.stream()
                 .collect(Collectors.groupingBy(
@@ -90,7 +94,7 @@ public class IncidentController {
 
         // Top hosts from recent audit logs (most active targets)
         LocalDateTime since = LocalDateTime.now().minusHours(24);
-        List<AuditLog> recent = auditLogRepository.findRecentEvents(since);
+        List<AuditLog> recent = auditLogRepository.findRecentEvents(since, tenantId);
         Map<String, Long> hostCount = new LinkedHashMap<>();
         for (AuditLog log : recent) {
             if (log.getRawData() == null) continue;
@@ -108,8 +112,8 @@ public class IncidentController {
                 .map(e -> Map.<String, Object>of("host", e.getKey(), "count", e.getValue()))
                 .collect(Collectors.toList());
 
-        long totalAlerts = auditLogRepository.countByCategory("THREAT")
-                + auditLogRepository.countByCategory("SECURITY_FINDING");
+        long totalAlerts = auditLogRepository.countByCategory("THREAT", tenantId)
+                + auditLogRepository.countByCategory("SECURITY_FINDING", tenantId);
 
         Map<String, Object> result = new HashMap<>();
         result.put("totalIncidents", all.size());
@@ -124,8 +128,18 @@ public class IncidentController {
     @GetMapping("/alerts")
     public ResponseEntity<Page<AuditLog>> alerts(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(auditLogRepository.findAlerts(PageRequest.of(page, size)));
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        return ResponseEntity.ok(auditLogRepository.findAlerts(PageRequest.of(page, size), tenantId(authentication)));
+    }
+
+    @SuppressWarnings("unchecked")
+    private String tenantId(Authentication auth) {
+        if (auth != null && auth.getDetails() instanceof Map<?, ?> details) {
+            Object tid = details.get("tenantId");
+            if (tid instanceof String s) return s;
+        }
+        return "default";
     }
 
     private int severityRank(String s) {

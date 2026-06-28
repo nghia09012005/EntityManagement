@@ -73,8 +73,10 @@ class GraphDeduplicationServiceTest {
 
     @Test
     void runDeduplication_savesAllLogsInOneCall() {
-        Map<String, Object> userRow = Map.of("fromVal", "nghia", "toVal", "nghia@company.vn");
-        Map<String, Object> hostRow = Map.of("fromVal", "win-pc01", "toVal", "win-pc01.corp.local");
+        // conf 0.75: base 0.50 + sharedHost 0.25
+        Map<String, Object> userRow = Map.of("fromVal", "nghia", "toVal", "nghia@company.vn", "confidence", 0.75);
+        // conf 0.85: base 0.45 + sharedIp 0.40
+        Map<String, Object> hostRow = Map.of("fromVal", "win-pc01", "toVal", "win-pc01.corp.local", "confidence", 0.85);
 
         when(neo4jClient.query(anyString()).bind(anyString()).to(anyString()).fetch().all())
                 .thenReturn(List.of(userRow))   // first call: users
@@ -100,7 +102,8 @@ class GraphDeduplicationServiceTest {
 
     @Test
     void runDeduplication_savesOnlyUserLogsWhenNoHostLinks() {
-        Map<String, Object> userRow = Map.of("fromVal", "admin", "toVal", "admin@corp.local");
+        // conf 0.50: base only — no shared hosts or IPs observed
+        Map<String, Object> userRow = Map.of("fromVal", "admin", "toVal", "admin@corp.local", "confidence", 0.50);
 
         when(neo4jClient.query(anyString()).bind(anyString()).to(anyString()).fetch().all())
                 .thenReturn(List.of(userRow))   // users: 1 match
@@ -110,5 +113,45 @@ class GraphDeduplicationServiceTest {
         service.runDeduplication();
 
         verify(dedupLogRepository, times(1)).saveAll(argThat(iter -> StreamSupport.stream(iter.spliterator(), false).count() == 1));
+    }
+
+    @Test
+    void runDeduplication_confidenceReflectsSharedSignals() {
+        // User with both sharedHost + sharedIp → conf = 0.50 + 0.25 + 0.15 = 0.90
+        Map<String, Object> highConf = Map.of("fromVal", "jdoe", "toVal", "jdoe@corp.local", "confidence", 0.90);
+        // User with no shared signals → conf = 0.50 (base only)
+        Map<String, Object> lowConf  = Map.of("fromVal", "alice", "toVal", "alice@corp.local", "confidence", 0.50);
+
+        when(neo4jClient.query(anyString()).bind(anyString()).to(anyString()).fetch().all())
+                .thenReturn(List.of(highConf, lowConf))
+                .thenReturn(List.of());
+
+        dedupSignal.mark();
+        service.runDeduplication();
+
+        verify(dedupLogRepository, times(1)).saveAll(argThat(iter -> {
+            List<GraphDedupLog> saved = StreamSupport.stream(iter.spliterator(), false)
+                    .toList();
+            return saved.size() == 2
+                    && saved.stream().anyMatch(l -> l.getConfidence() == 0.90)
+                    && saved.stream().anyMatch(l -> l.getConfidence() == 0.50);
+        }));
+    }
+
+    @Test
+    void runDeduplication_fallsBackToBaseConfidenceIfFieldMissing() {
+        // Query returned row without confidence field (e.g., MERGE ON MATCH path)
+        Map<String, Object> rowNoConf = Map.of("fromVal", "svc", "toVal", "svc@corp.local");
+
+        when(neo4jClient.query(anyString()).bind(anyString()).to(anyString()).fetch().all())
+                .thenReturn(List.of(rowNoConf))
+                .thenReturn(List.of());
+
+        dedupSignal.mark();
+        service.runDeduplication();
+
+        verify(dedupLogRepository, times(1)).saveAll(argThat(iter ->
+                StreamSupport.stream(iter.spliterator(), false)
+                        .anyMatch(l -> l.getConfidence() == 0.50)));
     }
 }

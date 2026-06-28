@@ -253,14 +253,32 @@ Tất cả relationship đều có: `firstSeen`, `lastSeen`, `count`, `firstEven
 
 ## Entity Deduplication (SAME_AS)
 
-`GraphDeduplicationService` chạy định kỳ (mặc định 2 phút), tạo `SAME_AS` link giữa các entity có thể là cùng một thực thể:
+`GraphDeduplicationService` chạy định kỳ (mặc định 2 phút), tạo `SAME_AS` link giữa các entity có thể là cùng một thực thể.
 
-| Rule              | Ví dụ                                         | Confidence |
-|-------------------|-----------------------------------------------|------------|
-| `email_prefix`    | `nghia` ↔ `nghia@company.vn`                  | 85%        |
-| `fqdn_shortname`  | `WIN-PC01` ↔ `WIN-PC01.corp.local`            | 80%        |
+Confidence **không hardcode** — được tính bằng multi-signal scoring ngay trong Cypher query (một round-trip duy nhất, không query thêm):
 
-Mỗi link mới được ghi vào MongoDB collection `graph_dedup_log`.
+### Rule: `email_prefix`  —  `jdoe` ↔ `jdoe@corp.local`
+
+| Signal | +Weight | Điều kiện |
+|--------|---------|-----------|
+| Base (naming match) | 0.50 | `split(u2.username,'@')[0] = u1.username` |
+| Shared Host | +0.25 | Cả 2 có `LOGGED_IN_TO` đến cùng Host node |
+| Shared IP | +0.15 | Cả 2 có `ALERTED_FROM` đến cùng IP node |
+
+Kết quả: chỉ tên khớp → `0.50`; cùng tên + cùng host + cùng IP → `0.90`
+
+### Rule: `fqdn_shortname`  —  `SRV-DC01` ↔ `SRV-DC01.corp.local`
+
+| Signal | +Weight | Điều kiện |
+|--------|---------|-----------|
+| Base (naming match) | 0.45 | `split(h2.hostname,'.')[0] = h1.hostname` |
+| Shared IP | +0.40 | Cùng IP có `AUTHENTICATED_TO` đến cả 2 Host node |
+
+Kết quả: chỉ tên khớp → `0.45`; cùng tên + cùng IP → `0.85`
+
+> **Tại sao không hardcode?** Hardcode là belief của developer về naming convention. Dynamic confidence là observation từ graph — cùng IP kết nối đến `SRV-DC01` và `SRV-DC01.corp.local` là bằng chứng độc lập xác nhận đây là một máy. Nếu chỉ tên khớp nhưng không có signal nào khác, confidence thấp là đúng.
+
+Mỗi link mới được ghi vào MongoDB collection `graph_dedup_log` với trường `confidence` phản ánh giá trị tính toán thực tế.
 ---
 
 ## Parsers
@@ -546,8 +564,9 @@ Mỗi file chứa một kịch bản tấn công hoàn chỉnh, trigger đúng 1
 | `dataset/scenario-c2-beacon.log`       | `C2BeaconRule`       | 8× beacon đến `update-cdn.live` cách đều 2 phút |
 | `dataset/scenario-lolbin.log`          | `LolBinRule`         | `certutil` + `regsvr32` + `mshta` + `bitsadmin` download payload |
 | `dataset/scenario-cve-exploit.log`     | `CveExploitRule`     | Log4Shell + Spring4Shell + ProxyShell + PrintNightmare |
+| `dataset/scenario-dedup.log`           | `GraphDeduplicationService` | `jdoe` ↔ `jdoe@corp.local` (conf 0.90), `SRV-DC01` ↔ `SRV-DC01.corp.local` (conf 0.85), `alice` ↔ `alice@corp.local` (conf 0.50 — no shared signals) |
 
-Upload từng file để tạo Incident tương ứng trên trang `/incidents`.
+Upload từng file để tạo Incident tương ứng trên trang `/incidents`. File `scenario-dedup.log` dùng để test SAME_AS dedup — sau khi upload, kiểm tra Neo4j để thấy SAME_AS links và giá trị `confidence` khác nhau tùy số signal khớp.
 
 ---
 

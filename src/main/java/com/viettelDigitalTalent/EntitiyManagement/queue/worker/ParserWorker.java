@@ -99,7 +99,7 @@ public class ParserWorker {
             // Sync: lưu raw log ngay trên Kafka consumer thread — đảm bảo document
             // tồn tại trước khi EnrichmentWorker chạy updateEnrichment.
             try {
-                auditLogRepository.saveRawLog(eventId, eventSource, eventCategory, timestamp, rawDataSnapshot, rawPayload);
+                auditLogRepository.saveRawLog(eventId, finalTenantId, eventSource, eventCategory, timestamp, rawDataSnapshot, rawPayload);
                 log.info("[ParserWorker] Lưu raw log thành công cho ID: {}", eventId);
             } catch (Exception e) {
                 log.error("[ParserWorker] Lỗi khi lưu raw log cho ID: {}", eventId, e);
