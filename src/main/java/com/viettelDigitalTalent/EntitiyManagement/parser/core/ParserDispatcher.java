@@ -52,8 +52,14 @@ public class ParserDispatcher {
         if (rawData.contains("\"alertName\"") || rawData.contains("\"severity\"")) {
             return alertParser.parse(rawData);
         }
-        // Default: windows/auth event
-        return windowsParser.parse(rawData);
+        if (rawData.contains("\"username\"") || rawData.contains("\"workstation\"")
+                || rawData.contains("\"accountName\"") || rawData.contains("\"user\"")) {
+            return windowsParser.parse(rawData);
+        }
+        // Unknown format — let ParserWorker catch and route to DLQ
+        log.warn("[ParserDispatcher] Không nhận dạng được định dạng log, đẩy vào DLQ. Preview: {}",
+                rawData.length() > 120 ? rawData.substring(0, 120) + "…" : rawData);
+        throw new IllegalArgumentException("Unknown log format: no recognizable fields found");
     }
 
     /** Kept for backward-compat nếu có code khác gọi. */

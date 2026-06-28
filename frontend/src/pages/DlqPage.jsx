@@ -4,7 +4,6 @@ import { fetchDlqEvents, fetchDlqSummary } from '../api'
 const TOPIC_COLOR = {
   'raw-logs':          { bg: '#3a1a1a', color: '#fc8181' },
   'normalized-events': { bg: '#1a2d3a', color: '#63b3ed' },
-  'enriched-events':   { bg: '#1a2d1a', color: '#68d391' },
 }
 
 function TopicBadge({ topic }) {
@@ -93,7 +92,6 @@ export default function DlqPage() {
             { label: 'Total Failed', value: summary.total, color: '#fc8181' },
             { label: 'raw-logs',          value: summary['raw-logs'],          color: '#fc8181' },
             { label: 'normalized-events', value: summary['normalized-events'], color: '#63b3ed' },
-            { label: 'enriched-events',   value: summary['enriched-events'],   color: '#68d391' },
           ].map(s => (
             <div key={s.label} style={{
               background: '#1a1d2e', border: '1px solid #2d3748', borderRadius: 8,

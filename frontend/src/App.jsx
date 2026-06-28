@@ -68,7 +68,7 @@ function AppContent() {
             </div>
             {user && (
               <div className="navbar-user">
-                Chào, <span className="navbar-username">{user.username}</span>
+                Hi, <span className="navbar-username">{user.username}</span>
                 <button className="logout-btn" onClick={handleLogout}>Đăng xuất</button>
               </div>
             )}

@@ -19,6 +19,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
@@ -142,8 +144,22 @@ class ParserDispatcherTest {
     void autoDetectArrayJsonNotTreatedAsFreeText() {
         when(windowsParser.parse(anyString())).thenReturn(new AuthenticationEvent());
         BaseEvent event = dispatcher.autoDetect("[{\"user\":\"admin\"}]");
-        // Starts with [ → not free-text → falls through to windowsParser (default)
+        // Starts with [ → not free-text → "user" field → windowsParser
         verify(llmProcess, never()).extractAlert(anyString());
+    }
+
+    @Test
+    void autoDetectUnknownJsonFormatThrowsException() {
+        assertThatThrownBy(() -> dispatcher.autoDetect("{\"foo\":\"bar\",\"baz\":123}"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Unknown log format");
+    }
+
+    @Test
+    void autoDetectUsernameFieldRoutesToWindows() {
+        when(windowsParser.parse(anyString())).thenReturn(new AuthenticationEvent());
+        BaseEvent event = dispatcher.autoDetect("{\"username\":\"admin\",\"workstation\":\"WIN-PC01\"}");
+        assertThat(event).isInstanceOf(AuthenticationEvent.class);
     }
 
     @Test
