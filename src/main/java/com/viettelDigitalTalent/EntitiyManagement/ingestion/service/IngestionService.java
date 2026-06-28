@@ -16,10 +16,14 @@ public class IngestionService {
     private final ObjectMapper objectMapper;
 
     public void sendToQueue(String rawData, String tenantId) {
+        sendToQueue(rawData, tenantId, "api");
+    }
+
+    public void sendToQueue(String rawData, String tenantId, String source) {
         try {
             IngestionEnvelope envelope = new IngestionEnvelope(tenantId, rawData);
             String json = objectMapper.writeValueAsString(envelope);
-            kafkaTemplate.send("raw-logs", json);
+            kafkaTemplate.send("raw-logs", source, json);
         } catch (Exception e) {
             log.error("[IngestionService] Lỗi khi gửi log vào queue", e);
         }

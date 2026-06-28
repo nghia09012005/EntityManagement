@@ -28,10 +28,16 @@ public class IpIntelligenceService {
         IpIntelInfo cached = (IpIntelInfo) redis.opsForValue().get(cacheKey);
         if (cached != null) return cached;
 
-        // Gọi 3 nguồn song song
-        CompletableFuture<String[]> whoisFuture  = CompletableFuture.supplyAsync(() -> whoisService.lookup(ip));
-        CompletableFuture<int[]>    abuseFuture  = CompletableFuture.supplyAsync(() -> abuseIpDbService.check(ip));
-        CompletableFuture<int[]>    otxFuture    = CompletableFuture.supplyAsync(() -> otxService.check(ip));
+        // Gọi 3 nguồn song song — mỗi future tự handle lỗi để tránh làm pipeline chết
+        CompletableFuture<String[]> whoisFuture = CompletableFuture
+                .supplyAsync(() -> whoisService.lookup(ip))
+                .exceptionally(e -> { log.warn("[IpIntel] WHOIS failed for {}: {}", ip, e.getMessage()); return new String[]{"unknown", "unknown"}; });
+        CompletableFuture<int[]> abuseFuture = CompletableFuture
+                .supplyAsync(() -> abuseIpDbService.check(ip))
+                .exceptionally(e -> { log.warn("[IpIntel] AbuseIPDB failed for {}: {}", ip, e.getMessage()); return new int[]{0, 0}; });
+        CompletableFuture<int[]> otxFuture = CompletableFuture
+                .supplyAsync(() -> otxService.check(ip))
+                .exceptionally(e -> { log.warn("[IpIntel] OTX failed for {}: {}", ip, e.getMessage()); return new int[]{0, 0}; });
 
         CompletableFuture.allOf(whoisFuture, abuseFuture, otxFuture).join();
 

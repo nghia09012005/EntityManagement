@@ -18,6 +18,10 @@ import org.springframework.core.task.SyncTaskExecutor;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import com.viettelDigitalTalent.EntitiyManagement.normalize.event.AuthenticationEvent;
+import com.viettelDigitalTalent.EntitiyManagement.normalize.event.NetworkEvent;
+import com.viettelDigitalTalent.EntitiyManagement.normalize.event.ProcessEvent;
+
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -43,6 +47,13 @@ class ParserWorkerTest {
         ReflectionTestUtils.setField(worker, "meterRegistry",      new SimpleMeterRegistry());
         ReflectionTestUtils.setField(worker, "kafkaTemplate",      kafkaTemplate);
         ReflectionTestUtils.setField(worker, "deadLetterPublisher",deadLetterPublisher);
+
+        // Flat-field JSON now routes through autoDetect — provide a lenient default so
+        // individual tests that don't care about event content still pass end-to-end.
+        AlertEvent defaultAlert = new AlertEvent();
+        defaultAlert.setAlertName("default");
+        defaultAlert.setSeverity("LOW");
+        lenient().when(parserDispatcher.autoDetect(anyString())).thenReturn(defaultAlert);
     }
 
     // ── Valid JSON → audit log + publish normalized ───────────────────────────
@@ -54,7 +65,7 @@ class ParserWorkerTest {
 
         worker.consume(record);
 
-        verify(auditLogRepository).saveRawLog(any(), any(), any(), any(), any());
+        verify(auditLogRepository).saveRawLog(any(), any(), any(), any(), any(), any());
         verify(kafkaTemplate).send(anyString(), anyString());
     }
 
@@ -65,7 +76,7 @@ class ParserWorkerTest {
 
         worker.consume(record);
 
-        verify(auditLogRepository).saveRawLog(any(), any(), any(), any(), any());
+        verify(auditLogRepository).saveRawLog(any(), any(), any(), any(), any(), any());
         verify(kafkaTemplate).send(anyString(), anyString());
     }
 
@@ -76,7 +87,7 @@ class ParserWorkerTest {
 
         worker.consume(record);
 
-        verify(auditLogRepository).saveRawLog(any(), any(), any(), any(), any());
+        verify(auditLogRepository).saveRawLog(any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -86,7 +97,7 @@ class ParserWorkerTest {
 
         worker.consume(record);
 
-        verify(auditLogRepository).saveRawLog(any(), any(), any(), any(), any());
+        verify(auditLogRepository).saveRawLog(any(), any(), any(), any(), any(), any());
     }
 
     // ── Free-text path (LLM async) ────────────────────────────────────────────
@@ -135,7 +146,7 @@ class ParserWorkerTest {
     void consumeDoesNotThrowOnAuditSaveError() {
         String json = "{\"eventType\":\"AUTHENTICATION\",\"username\":\"admin\",\"workstation\":\"WIN-PC01\"}";
         ConsumerRecord<String, String> record = new ConsumerRecord<>("raw-logs", 0, 0L, "windows", json);
-        doThrow(new RuntimeException("mongo down")).when(auditLogRepository).saveRawLog(any(), any(), any(), any(), any());
+        doThrow(new RuntimeException("mongo down")).when(auditLogRepository).saveRawLog(any(), any(), any(), any(), any(), any());
 
         worker.consume(record); // must not propagate exception
     }
@@ -147,7 +158,7 @@ class ParserWorkerTest {
 
         worker.consume(record);
 
-        verify(auditLogRepository).saveRawLog(any(), isNull(), any(), any(), any());
+        verify(auditLogRepository).saveRawLog(any(), isNull(), any(), any(), any(), any());
     }
 
     @Test

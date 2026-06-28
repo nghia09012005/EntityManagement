@@ -99,7 +99,7 @@ public class ParserWorker {
             // Sync: lưu raw log ngay trên Kafka consumer thread — đảm bảo document
             // tồn tại trước khi EnrichmentWorker chạy updateEnrichment.
             try {
-                auditLogRepository.saveRawLog(eventId, eventSource, eventCategory, timestamp, rawDataSnapshot);
+                auditLogRepository.saveRawLog(eventId, eventSource, eventCategory, timestamp, rawDataSnapshot, rawPayload);
                 log.info("[ParserWorker] Lưu raw log thành công cho ID: {}", eventId);
             } catch (Exception e) {
                 log.error("[ParserWorker] Lỗi khi lưu raw log cho ID: {}", eventId, e);
@@ -153,6 +153,13 @@ public class ParserWorker {
         try {
             BaseEvent event = objectMapper.readValue(rawJson, BaseEvent.class);
 
+            // Jackson created the right subtype but flat-field JSON left it empty
+            // (bridge setters have no @JsonProperty) — re-route through the parser
+            if (isMissingPrimaryFields(event)) {
+                log.debug("[ParserWorker] eventType detected but payload uses flat fields — routing to parser");
+                return parserDispatcher.autoDetect(rawJson);
+            }
+
             if (event instanceof AuthenticationEvent) {
                 event.setCategory(EventCategory.AUTHENTICATION.name());
             } else if (event instanceof ProcessEvent) {
@@ -168,5 +175,14 @@ public class ParserWorker {
             log.warn("Auto detect");
             return parserDispatcher.autoDetect(rawJson);
         }
+    }
+
+    /** True khi Jackson tạo được event nhưng không populate field nào có ý nghĩa. */
+    private boolean isMissingPrimaryFields(BaseEvent event) {
+        if (event instanceof AlertEvent ae)           return ae.getAlertName() == null && ae.getTargetIp() == null;
+        if (event instanceof AuthenticationEvent ae)  return ae.getUsername()   == null && ae.getIpAddress() == null;
+        if (event instanceof NetworkEvent ne)         return ne.getSrcIp()      == null && ne.getDstIp()     == null;
+        if (event instanceof ProcessEvent pe)         return pe.getProcessName() == null && pe.getFileHash()  == null;
+        return false;
     }
 }

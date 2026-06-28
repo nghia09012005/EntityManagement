@@ -1,12 +1,9 @@
 spring:
-  profiles:
-    active: dev
   application:
     name: EntityManagement
 
   kafka:
-    bootstrap-servers: kafka:29092   #    bootstrap-servers: localhost:9092
-
+    bootstrap-servers: localhost:9092
 
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -25,9 +22,7 @@ spring:
 
   data:
     redis:
-#      host: localhost
-#      port: 6379
-      host: redis
+      host: localhost
       port: 6379
 
       lettuce:
@@ -38,7 +33,7 @@ spring:
           min-idle: 0
 
     mongodb:
-      uri: ${MONGODB_URI:mongodb://root:root@mongodb:27017/soc_db?authSource=admin}
+      uri: mongodb://root:root@localhost:27017/soc_db?authSource=admin
 
   servlet:
     multipart:
@@ -46,14 +41,13 @@ spring:
       max-request-size: 100MB
 
   neo4j:
-#    uri: bolt://localhost:7687
-    uri: bolt://neo4j:7687
+    uri: bolt://localhost:7687
     authentication:
       username: neo4j
       password: password123
 
 minio:
-  url: ${MINIO_URL:http://minio:9000}
+  url: http://localhost:9000
   access-key: admin
   secret-key: password123
   bucket-name: uploads
@@ -70,9 +64,9 @@ groq:
 
 # Threat intelligence — bỏ comment và điền key thật để bật real implementation
 abuseipdb:
-   api-key: 318a6b99b99071359489f94e7517f1c9beb824171ec18ed6ce531a7a51cb018f5e6b7c7ed1402c75  # https://www.abuseipdb.com/account/api
+  api-key: 318a6b99b99071359489f94e7517f1c9beb824171ec18ed6ce531a7a51cb018f5e6b7c7ed1402c75  # https://www.abuseipdb.com/account/api
 otx:
-   api-key: 1e6c8e740611e066be69e03b6982fc6ac4d2be3e71ca019397ab9012d6d54f9d         # https://otx.alienvault.com/api
+  api-key: 1e6c8e740611e066be69e03b6982fc6ac4d2be3e71ca019397ab9012d6d54f9d         # https://otx.alienvault.com/api
 
 jwt:
   secret: soc-entity-management-jwt-secret-key-256bit-for-hs256-signing-2025
@@ -102,4 +96,3 @@ management:
       application: ${spring.application.name}
     distribution:
       percentiles-histogram:
-        http.server.requests: true

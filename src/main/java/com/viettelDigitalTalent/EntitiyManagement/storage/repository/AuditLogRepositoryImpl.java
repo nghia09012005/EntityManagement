@@ -19,14 +19,15 @@ public class AuditLogRepositoryImpl implements AuditLogRepository {
     private MongoTemplate mongoTemplate;
 
     @Override
-    public void saveRawLog(String eventId, String source, String category, LocalDateTime timestamp, Map<String, Object> rawData) {
+    public void saveRawLog(String eventId, String source, String category, LocalDateTime timestamp,
+                           Map<String, Object> rawData, String rawEvent) {
         Query query = new Query(Criteria.where("eventId").is(eventId));
         Update update = new Update()
                 .set("source", source)
                 .set("category", category)
                 .set("timestamp", timestamp)
                 .set("rawData", rawData)
-                // isEnriched chỉ set false khi INSERT — nếu doc đã tồn tại (re-process) không ghi đè
+                .set("rawEvent", rawEvent)
                 .setOnInsert("isEnriched", false);
 
         mongoTemplate.upsert(query, update, AuditLog.class);

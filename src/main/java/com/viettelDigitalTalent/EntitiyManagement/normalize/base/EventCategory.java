@@ -1,8 +1,16 @@
 package com.viettelDigitalTalent.EntitiyManagement.normalize.base;
 
 public enum EventCategory {
-    AUTHENTICATION, // Đăng nhập, đăng xuất, đổi mật khẩu
-    PROCESS,        // Chạy tiến trình, thực thi lệnh
-    NETWORK,        // Kết nối, socket, tường lửa
-    THREAT          // Cảnh báo từ các thiết bị bảo mật (IDS/IPS, Antivirus)
+    AUTHENTICATION(3002, 3),   // IAM
+    PROCESS(1007, 1),          // System Activity
+    NETWORK(4001, 4),          // Network Activity
+    THREAT(2001, 2);           // Findings / Security Finding
+
+    public final int classUid;
+    public final int categoryUid;
+
+    EventCategory(int classUid, int categoryUid) {
+        this.classUid    = classUid;
+        this.categoryUid = categoryUid;
+    }
 }

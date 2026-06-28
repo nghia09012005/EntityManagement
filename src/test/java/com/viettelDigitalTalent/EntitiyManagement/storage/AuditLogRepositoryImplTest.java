@@ -35,25 +35,25 @@ class AuditLogRepositoryImplTest {
 
     @Test
     void saveRawLogCallsUpsert() {
-        repo.saveRawLog("event-1", "kafka", "AUTHENTICATION", LocalDateTime.now(), Map.of("user", "admin"));
+        repo.saveRawLog("event-1", "kafka", "AUTHENTICATION", LocalDateTime.now(), Map.of("user", "admin"), null);
         verify(mongoTemplate).upsert(any(Query.class), any(Update.class), eq(AuditLog.class));
     }
 
     @Test
     void saveRawLogWithNullSourceDoesNotThrow() {
-        repo.saveRawLog("event-2", null, "PROCESS", LocalDateTime.now(), Map.of());
+        repo.saveRawLog("event-2", null, "PROCESS", LocalDateTime.now(), Map.of(), null);
         verify(mongoTemplate).upsert(any(Query.class), any(Update.class), eq(AuditLog.class));
     }
 
     @Test
     void saveRawLogWithEmptyRawDataDoesNotThrow() {
-        repo.saveRawLog("event-3", "file", "ALERT", LocalDateTime.now(), Map.of());
+        repo.saveRawLog("event-3", "file", "ALERT", LocalDateTime.now(), Map.of(), null);
         verify(mongoTemplate).upsert(any(), any(), eq(AuditLog.class));
     }
 
     @Test
     void saveRawLogDoesNotCallUpdateFirst() {
-        repo.saveRawLog("event-4", "kafka", "NETWORK", LocalDateTime.now(), Map.of());
+        repo.saveRawLog("event-4", "kafka", "NETWORK", LocalDateTime.now(), Map.of(), null);
         verify(mongoTemplate, never()).updateFirst(any(), any(), eq(AuditLog.class));
     }
 
@@ -77,7 +77,7 @@ class AuditLogRepositoryImplTest {
 
     @Test
     void saveRawLogAndUpdateEnrichmentUseAuditLogClass() {
-        repo.saveRawLog("e1", "s", "c", LocalDateTime.now(), Map.of());
+        repo.saveRawLog("e1", "s", "c", LocalDateTime.now(), Map.of(), null);
         repo.updateEnrichment("e1", Map.of());
 
         verify(mongoTemplate, times(1)).upsert(any(), any(), eq(AuditLog.class));
@@ -86,7 +86,7 @@ class AuditLogRepositoryImplTest {
 
     @Test
     void saveRawLogWithNullTimestampDoesNotThrow() {
-        repo.saveRawLog("event-6", "kafka", "AUTHENTICATION", null, Map.of());
+        repo.saveRawLog("event-6", "kafka", "AUTHENTICATION", null, Map.of(), null);
         verify(mongoTemplate).upsert(any(), any(), eq(AuditLog.class));
     }
 

@@ -99,9 +99,7 @@ public class EnrichmentWorker {
                             .filter(key -> event.getRawData().containsKey(key))
                             .collect(Collectors.toMap(k -> k, k -> event.getRawData().get(k)));
 
-                    if (!enrichmentData.isEmpty()) {
-                        auditLogRepository.updateEnrichment(event.getEventId(), enrichmentData);
-                    }
+                    auditLogRepository.updateEnrichment(event.getEventId(), enrichmentData);
                     log.info("[EnrichmentWorker] Async success ID: {}", event.getEventId());
                 } catch (Exception e) {
                     log.error("[EnrichmentWorker] Lỗi xử lý logic enrichment: {}", e.getMessage());

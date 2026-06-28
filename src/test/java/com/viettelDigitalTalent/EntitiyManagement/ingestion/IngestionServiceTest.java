@@ -36,7 +36,7 @@ class IngestionServiceTest {
 
         // Sửa verify: Phải kiểm tra chuỗi JSON chứa tenantId và logLine
         // Chúng ta dùng anyString() hoặc regex để khớp JSON
-        verify(kafkaTemplate).send(org.mockito.ArgumentMatchers.eq("raw-logs"), anyString());
+        verify(kafkaTemplate).send(org.mockito.ArgumentMatchers.eq("raw-logs"), anyString(), anyString());
     }
 
     @Test
@@ -45,6 +45,6 @@ class IngestionServiceTest {
 
         ingestionService.sendToQueue(logLine, TEST_TENANT);
 
-        verify(kafkaTemplate).send(org.mockito.ArgumentMatchers.eq("raw-logs"), anyString());
+        verify(kafkaTemplate).send(org.mockito.ArgumentMatchers.eq("raw-logs"), anyString(), anyString());
     }
 }

@@ -19,6 +19,7 @@ public class AuditLog {
     private String category;
     private LocalDateTime timestamp;
     private Map<String, Object> rawData;
+    private String rawEvent;
     private boolean isEnriched;
     private Map<String, Object> enrichment;
 }
