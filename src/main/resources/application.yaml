@@ -39,6 +39,7 @@ spring:
 
     mongodb:
       uri: ${MONGODB_URI:mongodb://root:root@mongodb:27017/soc_db?authSource=admin}
+      auto-index-creation: true
 
   servlet:
     multipart:
