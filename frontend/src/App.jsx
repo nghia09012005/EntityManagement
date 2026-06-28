@@ -4,6 +4,7 @@ import EntityListPage from './pages/EntityListPage'
 import EntityDetailPage from './pages/EntityDetailPage'
 import PathFinderPage from './pages/PathFinderPage'
 import DlqPage from './pages/DlqPage'
+import IncidentsPage from './pages/IncidentsPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import UploadPanel from './components/UploadPanel'
@@ -62,9 +63,10 @@ function AppContent() {
           <span className="navbar-sub">Security Operations Center</span>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 16, alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: 4 }}>
-              <Link to="/"      className={`nav-link ${isHome ? 'active' : ''}`}>Entities</Link>
-              <Link to="/paths" className={`nav-link ${location.pathname === '/paths' ? 'active' : ''}`}>Path Finder</Link>
-              <Link to="/dlq"   className={`nav-link ${location.pathname === '/dlq'   ? 'active' : ''}`}>Dead Letters</Link>
+              <Link to="/"          className={`nav-link ${isHome ? 'active' : ''}`}>Entities</Link>
+              <Link to="/paths"     className={`nav-link ${location.pathname === '/paths'     ? 'active' : ''}`}>Path Finder</Link>
+              <Link to="/incidents" className={`nav-link ${location.pathname === '/incidents' ? 'active' : ''}`}>Incidents</Link>
+              <Link to="/dlq"       className={`nav-link ${location.pathname === '/dlq'       ? 'active' : ''}`}>Dead Letters</Link>
             </div>
             {user && (
               <div className="navbar-user">
@@ -107,6 +109,14 @@ function AppContent() {
             element={
               <ProtectedRoute user={user}>
                 <PathFinderPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/incidents"
+            element={
+              <ProtectedRoute user={user}>
+                <IncidentsPage />
               </ProtectedRoute>
             }
           />

@@ -86,3 +86,18 @@ export const fetchEnrichmentByEventId = (eventId) =>
   fetch(`${BASE_URL}/api/enrichment/event/${encodeURIComponent(eventId)}`, { headers: authHeaders() })
     .then(r => r.json())
     .catch(() => ({}))
+
+export const fetchIncidents = (page = 0, size = 20) =>
+  fetch(`${BASE_URL}/api/incidents?page=${page}&size=${size}`, { headers: authHeaders() }).then(r => r.json())
+
+export const fetchIncidentStats = () =>
+  fetch(`${BASE_URL}/api/incidents/stats`, { headers: authHeaders() }).then(r => r.json())
+
+export const fetchAlertLogs = (page = 0, size = 20) =>
+  fetch(`${BASE_URL}/api/incidents/alerts?page=${page}&size=${size}`, { headers: authHeaders() }).then(r => r.json())
+
+export const updateIncidentStatus = (id, status) =>
+  fetch(`${BASE_URL}/api/incidents/${encodeURIComponent(id)}/status?status=${encodeURIComponent(status)}`, {
+    method: 'PATCH',
+    headers: authHeaders(),
+  }).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`) })

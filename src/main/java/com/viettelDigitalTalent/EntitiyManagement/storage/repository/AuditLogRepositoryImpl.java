@@ -2,14 +2,19 @@ package com.viettelDigitalTalent.EntitiyManagement.storage.repository;
 
 import com.viettelDigitalTalent.EntitiyManagement.storage.mongodb.AuditLog;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 @Repository
@@ -49,5 +54,31 @@ public class AuditLogRepositoryImpl implements AuditLogRepository {
         if (eventId == null || eventId.isBlank()) return Collections.emptyMap();
         AuditLog log = mongoTemplate.findById(eventId, AuditLog.class);
         return (log != null && log.getEnrichment() != null) ? log.getEnrichment() : Collections.emptyMap();
+    }
+
+    @Override
+    public List<AuditLog> findRecentEvents(LocalDateTime since) {
+        Query query = new Query(Criteria.where("timestamp").gte(since))
+                .with(Sort.by(Sort.Direction.ASC, "timestamp"));
+        return mongoTemplate.find(query, AuditLog.class);
+    }
+
+    @Override
+    public Page<AuditLog> findAlerts(Pageable pageable) {
+        Criteria criteria = new Criteria().orOperator(
+                Criteria.where("category").is("THREAT"),
+                Criteria.where("category").is("SECURITY_FINDING")
+        );
+        long total = mongoTemplate.count(new Query(criteria), AuditLog.class);
+        Query query = new Query(criteria)
+                .with(pageable)
+                .with(Sort.by(Sort.Direction.DESC, "timestamp"));
+        List<AuditLog> content = mongoTemplate.find(query, AuditLog.class);
+        return new PageImpl<>(content, pageable, total);
+    }
+
+    @Override
+    public long countByCategory(String category) {
+        return mongoTemplate.count(new Query(Criteria.where("category").is(category)), AuditLog.class);
     }
 }

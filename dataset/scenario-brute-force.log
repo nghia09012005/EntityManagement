@@ -1,0 +1,15 @@
+{"eventType":"AUTHENTICATION","username":"hradmin","ipAddress":"198.51.100.77","workstation":"SRV-HR01","success":false,"timestamp":"2024-03-15T02:00:00Z"}
+{"eventType":"AUTHENTICATION","username":"hradmin","ipAddress":"198.51.100.77","workstation":"SRV-HR01","success":false,"timestamp":"2024-03-15T02:00:04Z"}
+{"eventType":"AUTHENTICATION","username":"hradmin","ipAddress":"198.51.100.77","workstation":"SRV-HR01","success":false,"timestamp":"2024-03-15T02:00:08Z"}
+{"eventType":"AUTHENTICATION","username":"hradmin","ipAddress":"198.51.100.77","workstation":"SRV-HR01","success":false,"timestamp":"2024-03-15T02:00:12Z"}
+{"eventType":"AUTHENTICATION","username":"hradmin","ipAddress":"198.51.100.77","workstation":"SRV-HR01","success":false,"timestamp":"2024-03-15T02:00:16Z"}
+{"eventType":"AUTHENTICATION","username":"hradmin","ipAddress":"198.51.100.77","workstation":"SRV-HR01","success":true,"timestamp":"2024-03-15T02:00:22Z"}
+{"eventType":"AUTHENTICATION","username":"dbadmin","ipAddress":"198.51.100.77","workstation":"SRV-DB01","success":false,"timestamp":"2024-03-15T02:01:00Z"}
+{"eventType":"AUTHENTICATION","username":"dbadmin","ipAddress":"198.51.100.77","workstation":"SRV-DB01","success":false,"timestamp":"2024-03-15T02:01:05Z"}
+{"eventType":"AUTHENTICATION","username":"dbadmin","ipAddress":"198.51.100.77","workstation":"SRV-DB01","success":false,"timestamp":"2024-03-15T02:01:10Z"}
+{"eventType":"AUTHENTICATION","username":"dbadmin","ipAddress":"198.51.100.77","workstation":"SRV-DB01","success":true,"timestamp":"2024-03-15T02:01:18Z"}
+{"eventType":"NETWORK","srcIp":"198.51.100.77","dstIp":"10.1.0.10","dstPort":3389,"timestamp":"2024-03-15T02:03:00Z"}
+{"eventType":"NETWORK","srcIp":"10.1.0.10","dstIp":"198.51.100.77","dstPort":443,"dstDomain":"exfil-drop.io","timestamp":"2024-03-15T02:05:00Z"}
+{"eventType":"PROCESS","processName":"net.exe","processPath":"C:\\Windows\\System32\\net.exe","fileHash":"aabbccdd11223344aabbccdd11223344aabbccdd","commandLine":"net.exe user /domain","hostname":"SRV-HR01","timestamp":"2024-03-15T02:06:00Z"}
+{"eventType":"PROCESS","processName":"net.exe","processPath":"C:\\Windows\\System32\\net.exe","fileHash":"aabbccdd11223344aabbccdd11223344aabbccdd","commandLine":"net.exe localgroup administrators hradmin /add","hostname":"SRV-HR01","timestamp":"2024-03-15T02:07:00Z"}
+{"eventType":"ALERT","alertName":"Brute Force Detected","severity":"HIGH","description":"Multiple failed logins from external IP 198.51.100.77","targetUser":"hradmin","targetIp":"198.51.100.77","timestamp":"2024-03-15T02:08:00Z"}

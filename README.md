@@ -182,11 +182,11 @@ Bên cạnh đó, nền tảng cung cấp khả năng trực quan hóa quan hệ
 
 ## Kafka Topics
 
-| Topic               | Producer          | Consumer                          |
-|---------------------|-------------------|-----------------------------------|
-| `raw-logs`          | Ingestion API     | ParserWorker                      |
-| `normalized-events` | ParserWorker      | EnrichmentWorker + **GraphWorker** |
-| `dead-letter-queue` | bất kỳ worker nào | DlqWorker → MongoDB `dlq_events`  |
+| Topic               | Producer          | Consumer                                                      |
+|---------------------|-------------------|---------------------------------------------------------------|
+| `raw-logs`          | Ingestion API     | ParserWorker                                                  |
+| `normalized-events` | ParserWorker      | EnrichmentWorker + GraphWorker + **CorrelationWorker**        |
+| `dead-letter-queue` | bất kỳ worker nào | DlqWorker → MongoDB `dlq_events`                              |
 
 ---
 
@@ -273,6 +273,85 @@ Mỗi link mới được ghi vào MongoDB collection `graph_dedup_log`.
 | AlertEventParser     | ALERT          | Generic alert JSON                              |
 | LLM fallback         | bất kỳ         | Free text — Gemini → Groq → Mock (offline safe) |
 
+> **Unknown format**: JSON không nhận dạng được field nào → throw `IllegalArgumentException` → `dead-letter-queue` (không fallback về Windows parser nữa).
+
+---
+
+## OCSF (Open Cybersecurity Schema Framework)
+
+Các event sau khi parse được ánh xạ sang OCSF để chuẩn hóa với industry standard:
+
+| EventType      | OCSF Class                  | class_uid |
+|----------------|-----------------------------|-----------|
+| AUTHENTICATION | Authentication               | 3002      |
+| PROCESS        | Process Activity             | 1007      |
+| NETWORK        | Network Activity             | 4001      |
+| ALERT          | Security Finding             | 2001      |
+
+Mỗi `BaseEvent` mang các OCSF fields:
+
+- `class_uid` — ID lớp event
+- `activity_id` — hoạt động (SUCCESS=1, FAILURE=2, …)
+- `severity_id` — mức độ (0=Unknown … 6=Fatal)
+- `actor` — `OcsfActor` (user + process thực hiện hành động)
+- `src_endpoint` / `dst_endpoint` — `OcsfEndpoint` (IP + hostname)
+- `file` — `OcsfFile` (name + path + hash)
+- `finding` — `OcsfFinding` (title + uid — dành cho ALERT)
+
+**Backward compat**: các field gốc (`username`, `ipAddress`, `alertName`, …) vẫn có thể dùng qua bridge getter/setter, không cần sửa code cũ.
+
+---
+
+## Correlation Engine
+
+`CorrelationWorker` là Kafka consumer thứ 3 trên `normalized-events` (consumer group `soc-correlation-group`). Mỗi khi nhận event mới, nó trigger evaluation cycle với **debounce 10 giây** — tránh query MongoDB liên tục khi có burst.
+
+### Cơ chế
+
+```
+normalized-events → CorrelationWorker (debounce 10s per tenant)
+                          │
+                          ▼
+         query MongoDB: tất cả events trong 30 phút gần nhất
+                          │
+                          ▼
+             apply 5 CorrelationRule (độc lập nhau)
+                          │
+                          ▼
+         upsert Incident vào MongoDB nếu rule match
+         (dedup key: patternName + windowStart snapped theo giờ)
+```
+
+### Correlation Rules
+
+| Rule                 | MITRE  | Điều kiện                                              | Severity |
+|----------------------|--------|--------------------------------------------------------|----------|
+| `BruteForceRule`     | T1110  | ≥3 failed auth + 1 success từ cùng `ipAddress`        | HIGH     |
+| `CredentialDumpRule` | T1003  | `commandLine` chứa `mimikatz`, `lsadump`, `sekurlsa`… | CRITICAL |
+| `C2BeaconRule`       | T1071  | ≥3 NETWORK events đến cùng `dstDomain`                | HIGH     |
+| `LolBinRule`         | T1218  | certutil/regsvr32/mshta/… + `http://` trong cmdLine   | MEDIUM   |
+| `CveExploitRule`     | T1190  | ALERT event có field `targetCve` hoặc `cve_uid`       | CRITICAL |
+
+### Incident Document
+
+```json
+{
+  "patternName":    "BruteForce",
+  "mitreId":        "T1110",
+  "title":          "Brute Force → Account Compromise từ 198.51.100.77",
+  "severity":       "HIGH",
+  "status":         "NEW",
+  "affectedEntities": { "ips": ["198.51.100.77"], "users": ["hradmin"] },
+  "relatedEventIds":  ["uuid-1", "uuid-2", "..."],
+  "timeline":       [{ "time": "2024-03-15T02:00:00", "summary": "Auth FAILED | user=hradmin | ip=198.51.100.77", "eventId": "..." }],
+  "recommendedActions": ["Block IP 198.51.100.77 tại firewall", "Force reset mật khẩu cho: hradmin"],
+  "windowStart":    "2024-03-15T02:00:00",
+  "detectedAt":     "2024-03-15T02:08:00"
+}
+```
+
+Status flow: **NEW** → **INVESTIGATING** → **RESOLVED** (cập nhật qua `PATCH /api/incidents/{id}/status`).
+
 ---
 
 ## Enrichment Sources
@@ -288,10 +367,12 @@ Mỗi link mới được ghi vào MongoDB collection `graph_dedup_log`.
 
 ## MongoDB Collections
 
-| Collection        | Nội dung                                             |
-|-------------------|------------------------------------------------------|
-| `audit_logs`      | Raw log gốc trước khi parse, lưu ngay khi nhận vào  |
-| `graph_dedup_log` | Log mỗi SAME_AS link mới được tạo bởi dedup job     |
+| Collection        | Nội dung                                                                   |
+|-------------------|----------------------------------------------------------------------------|
+| `audit_logs`      | Raw log + enrichment. Lưu ngay khi nhận, update thêm enrichment sau       |
+| `incidents`       | Kịch bản tấn công do Correlation Engine phát hiện (xem Correlation Engine) |
+| `dlq_events`      | Event xử lý lỗi từ mọi Kafka worker                                       |
+| `graph_dedup_log` | Log mỗi SAME_AS link mới được tạo bởi dedup job                           |
 
 ---
 
@@ -302,6 +383,14 @@ src/main/java/com/viettelDigitalTalent/EntitiyManagement/
 ├── common/                 # Utils chung
 │   └── utils/
 ├── config/                 # Security, CORS, Kafka/Redis/MinIO/Neo4j/Async config
+│                           #   AsyncConfig: taskExecutor (LLM) + enrichmentExecutor (IO-bound)
+├── correlation/            # Correlation Engine — phát hiện kịch bản tấn công
+│   ├── controller/         # IncidentController  (/api/incidents)
+│   ├── rules/              # BruteForceRule, CredentialDumpRule, C2BeaconRule,
+│   │                       #   LolBinRule, CveExploitRule
+│   ├── CorrelationRule.java    # interface + helper default methods
+│   ├── CorrelationService.java # apply all rules, upsert incidents
+│   └── CorrelationWorker.java  # Kafka consumer soc-correlation-group + debounce
 ├── enrichment/             # Làm giàu dữ liệu
 │   ├── core/               # EnrichmentService, EnrichmentProvider
 │   ├── dtos/               # GeoInfo, IpIntelInfo, MalwareInfo
@@ -323,13 +412,14 @@ src/main/java/com/viettelDigitalTalent/EntitiyManagement/
 │   ├── dto/
 │   ├── filter/
 │   └── service/
-├── normalize/              # Event data models
-│   ├── alert/
-│   ├── base/
-│   └── event/
+├── normalize/              # Event data models (OCSF-aligned)
+│   ├── alert/              # AlertEvent
+│   ├── base/               # BaseEvent, EventCategory
+│   ├── event/              # AuthenticationEvent, NetworkEvent, ProcessEvent
+│   └── ocsf/               # OcsfActor, OcsfEndpoint, OcsfFile, OcsfFinding, …
 ├── parser/                 # Parser raw log -> BaseEvent
 │   ├── alert/
-│   ├── core/
+│   ├── core/               # ParserDispatcher, EventParser interface
 │   ├── network/
 │   ├── process/
 │   └── windows/
@@ -337,10 +427,10 @@ src/main/java/com/viettelDigitalTalent/EntitiyManagement/
 │   ├── config/
 │   ├── controller/
 │   ├── publisher/
-│   └── worker/
+│   └── worker/             # ParserWorker, EnrichmentWorker, GraphWorker, DlqWorker
 └── storage/                # MongoDB documents + repositories
-    ├── mongodb/
-    └── repository/
+    ├── mongodb/             # AuditLog, Incident, DlqEvent, GraphDedupLog, User
+    └── repository/          # AuditLogRepository(+Impl), IncidentRepository, …
 
 frontend/src/
 ├── pages/
@@ -349,6 +439,7 @@ frontend/src/
 │   ├── EntityListPage.jsx      # Danh sách entity
 │   ├── EntityDetailPage.jsx    # Chi tiết entity + graph neighbors/enrichment
 │   ├── PathFinderPage.jsx      # Tìm attack path
+│   ├── IncidentsPage.jsx       # Incidents + stats (top IPs/hosts) + Alert Logs tab
 │   └── DlqPage.jsx             # Dead letter queue UI
 ├── components/
 │   ├── EntityBadge.jsx
@@ -443,6 +534,20 @@ curl -X POST http://localhost:8080/api/files/upload \
 # Hoặc dùng UI: mở http://localhost:5173 → kéo thả soc_logs.json vào File Upload panel
 # Copy từng dòng trong soc_freetext.txt → dán vào ô "Nhập Alert (Free Text)" → Gửi Alert
 ```
+
+### Scenario files — test Correlation Engine
+
+Mỗi file chứa một kịch bản tấn công hoàn chỉnh, trigger đúng 1 correlation rule:
+
+| File | Rule trigger | Kịch bản |
+|------|-------------|----------|
+| `dataset/scenario-brute-force.log`     | `BruteForceRule`     | 5× failed login + 1× success từ IP `198.51.100.77` |
+| `dataset/scenario-credential-dump.log` | `CredentialDumpRule` | `mimikatz sekurlsa::logonpasswords` + `lsadump::sam` trên DC |
+| `dataset/scenario-c2-beacon.log`       | `C2BeaconRule`       | 8× beacon đến `update-cdn.live` cách đều 2 phút |
+| `dataset/scenario-lolbin.log`          | `LolBinRule`         | `certutil` + `regsvr32` + `mshta` + `bitsadmin` download payload |
+| `dataset/scenario-cve-exploit.log`     | `CveExploitRule`     | Log4Shell + Spring4Shell + ProxyShell + PrintNightmare |
+
+Upload từng file để tạo Incident tương ứng trên trang `/incidents`.
 
 ---
 

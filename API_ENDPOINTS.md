@@ -535,7 +535,179 @@ Authorization: Bearer <token>
 
 ---
 
-## 7. Threat Intel
+## 7. Incidents
+
+Correlation Engine phát hiện kịch bản tấn công từ các event trong `normalized-events`. Kết quả lưu vào MongoDB collection `incidents`.
+
+### GET `/api/incidents`
+
+Danh sách incidents đã phát hiện, sắp xếp mới nhất trước.
+
+**Auth:** required
+
+| Param | Type | Required | Default | Description |
+|---|---|---:|---|---|
+| `page` | query | no | `0` | Page index |
+| `size` | query | no | `20` | Page size |
+
+**Request**
+
+```http
+GET /api/incidents?page=0&size=20
+Authorization: Bearer <token>
+```
+
+**Response `200 OK`**
+
+```json
+{
+  "content": [
+    {
+      "id": "uuid-inc",
+      "patternName": "BruteForce",
+      "mitreId": "T1110",
+      "title": "Brute Force → Account Compromise từ 198.51.100.77",
+      "severity": "HIGH",
+      "status": "NEW",
+      "affectedEntities": {
+        "ips": ["198.51.100.77"],
+        "users": ["hradmin"]
+      },
+      "relatedEventIds": ["uuid-1", "uuid-2"],
+      "timeline": [
+        { "time": "2024-03-15T02:00:00", "summary": "Auth FAILED | user=hradmin | ip=198.51.100.77", "eventId": "uuid-1" }
+      ],
+      "recommendedActions": [
+        "Block IP 198.51.100.77 tại firewall/proxy",
+        "Force reset mật khẩu cho: hradmin"
+      ],
+      "windowStart": "2024-03-15T02:00:00",
+      "detectedAt": "2024-03-15T02:08:00",
+      "updatedAt": "2024-03-15T02:08:00"
+    }
+  ],
+  "totalElements": 1,
+  "totalPages": 1
+}
+```
+
+---
+
+### GET `/api/incidents/stats`
+
+Thống kê tổng hợp: severity, status, top IPs nguy hiểm, top hosts bị tác động.
+
+**Auth:** required
+
+**Request**
+
+```http
+GET /api/incidents/stats
+Authorization: Bearer <token>
+```
+
+**Response `200 OK`**
+
+```json
+{
+  "totalIncidents": 5,
+  "bySeverity": {
+    "CRITICAL": 2,
+    "HIGH": 2,
+    "MEDIUM": 1
+  },
+  "byStatus": {
+    "NEW": 3,
+    "INVESTIGATING": 1,
+    "RESOLVED": 1
+  },
+  "topIps": [
+    { "ip": "198.51.100.77", "count": 2, "severity": "CRITICAL" },
+    { "ip": "185.234.219.4", "count": 1, "severity": "HIGH" }
+  ],
+  "topHosts": [
+    { "host": "WIN-DC01",   "count": 12 },
+    { "host": "SRV-HR01",   "count": 8  }
+  ],
+  "totalAlerts": 42
+}
+```
+
+`topIps` — IP xuất hiện nhiều nhất trong incidents (attacker source), kèm severity cao nhất.  
+`topHosts` — host có nhiều event nhất trong 24 giờ qua (victim activity), tính từ `audit_logs`.
+
+---
+
+### GET `/api/incidents/alerts`
+
+Danh sách alert log từ `audit_logs` (category = `THREAT` hoặc `SECURITY_FINDING`), sắp xếp mới nhất trước.
+
+**Auth:** required
+
+| Param | Type | Required | Default | Description |
+|---|---|---:|---|---|
+| `page` | query | no | `0` | Page index |
+| `size` | query | no | `20` | Page size |
+
+**Request**
+
+```http
+GET /api/incidents/alerts?page=0&size=20
+Authorization: Bearer <token>
+```
+
+**Response `200 OK`**
+
+```json
+{
+  "content": [
+    {
+      "eventId": "uuid-alert",
+      "source": "api",
+      "category": "THREAT",
+      "timestamp": "2024-03-15T10:13:00",
+      "rawData": {
+        "alertName": "LOLBin Abuse — Payload Download",
+        "severity": "MEDIUM",
+        "targetProcess": "certutil.exe",
+        "targetHost": "IT-WS01"
+      }
+    }
+  ],
+  "totalElements": 42,
+  "totalPages": 3
+}
+```
+
+---
+
+### PATCH `/api/incidents/{id}/status`
+
+Cập nhật trạng thái xử lý của một incident.
+
+**Auth:** required
+
+| Param | Type | Required | Description |
+|---|---|---:|---|
+| `id` | path | yes | Incident ID |
+| `status` | query | yes | `NEW` \| `INVESTIGATING` \| `RESOLVED` |
+
+**Request**
+
+```http
+PATCH /api/incidents/uuid-inc/status?status=INVESTIGATING
+Authorization: Bearer <token>
+```
+
+**Response `200 OK`** — không có body.
+
+**Response `400 Bad Request`** — khi `status` không hợp lệ.
+
+**Response `404 Not Found`** — khi incident ID không tồn tại.
+
+---
+
+## 8. Threat Intel
 
 ### GET `/api/internal/threat-intel/provider`
 
@@ -564,7 +736,7 @@ none
 
 ---
 
-## 8. Actuator & Monitoring
+## 9. Actuator & Monitoring
 
 Các endpoint actuator được public theo `SecurityConfig`.
 
@@ -668,7 +840,7 @@ Mỗi relationship chính có metadata:
 | Topic | Producer | Consumer |
 |---|---|---|
 | `raw-logs` | Ingestion API / file ingestion | ParserWorker |
-| `normalized-events` | ParserWorker | GraphWorker, EnrichmentWorker |
+| `normalized-events` | ParserWorker | GraphWorker, EnrichmentWorker, **CorrelationWorker** |
 | `dead-letter-queue` | Any worker via DeadLetterPublisher | DlqWorker |
 
 ---
