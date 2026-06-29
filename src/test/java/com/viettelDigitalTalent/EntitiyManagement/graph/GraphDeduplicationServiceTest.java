@@ -2,6 +2,7 @@ package com.viettelDigitalTalent.EntitiyManagement.graph;
 
 import com.viettelDigitalTalent.EntitiyManagement.graph.service.DedupSignal;
 import com.viettelDigitalTalent.EntitiyManagement.graph.service.GraphDeduplicationService;
+import com.viettelDigitalTalent.EntitiyManagement.storage.mongodb.GraphDedupLog;
 import com.viettelDigitalTalent.EntitiyManagement.storage.repository.GraphDedupLogRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

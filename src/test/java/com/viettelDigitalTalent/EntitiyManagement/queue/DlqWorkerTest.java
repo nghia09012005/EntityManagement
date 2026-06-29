@@ -95,4 +95,40 @@ class DlqWorkerTest {
         verify(dlqEventRepository).save(captor.capture());
         assertThat(captor.getValue().getSourceTopic()).isEqualTo("unknown");
     }
+
+    @Test
+    void consume_extractsTenantIdFromOriginalPayload() {
+        String originalPayload = "{\"tenantId\":\"abc\",\"sourceTopic\":\"raw-logs\"}";
+        String msg = "{\"sourceTopic\":\"raw-logs\",\"originalPayload\":\""
+                + originalPayload.replace("\"", "\\\"")
+                + "\",\"error\":\"err\",\"errorClass\":\"Exception\"}";
+
+        worker.consume(record(msg));
+
+        ArgumentCaptor<DlqEvent> captor = ArgumentCaptor.forClass(DlqEvent.class);
+        verify(dlqEventRepository).save(captor.capture());
+        assertThat(captor.getValue().getTenantId()).isEqualTo("abc");
+    }
+
+    @Test
+    void consume_defaultsTenantIdWhenMissing() {
+        String msg = "{\"sourceTopic\":\"raw-logs\",\"originalPayload\":\"{}\",\"error\":\"err\",\"errorClass\":\"Exception\"}";
+
+        worker.consume(record(msg));
+
+        ArgumentCaptor<DlqEvent> captor = ArgumentCaptor.forClass(DlqEvent.class);
+        verify(dlqEventRepository).save(captor.capture());
+        assertThat(captor.getValue().getTenantId()).isEqualTo("default");
+    }
+
+    @Test
+    void consume_defaultsTenantIdWhenPayloadIsEmpty() {
+        String msg = "{\"sourceTopic\":\"raw-logs\",\"originalPayload\":\"\",\"error\":\"err\",\"errorClass\":\"Exception\"}";
+
+        worker.consume(record(msg));
+
+        ArgumentCaptor<DlqEvent> captor = ArgumentCaptor.forClass(DlqEvent.class);
+        verify(dlqEventRepository).save(captor.capture());
+        assertThat(captor.getValue().getTenantId()).isEqualTo("default");
+    }
 }

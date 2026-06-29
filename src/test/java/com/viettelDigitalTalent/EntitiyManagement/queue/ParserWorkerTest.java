@@ -65,7 +65,7 @@ class ParserWorkerTest {
 
         worker.consume(record);
 
-        verify(auditLogRepository).saveRawLog(any(), any(), any(), any(), any(), any());
+        verify(auditLogRepository).saveRawLog(any(), any(), any(), any(), any(), any(), any());
         verify(kafkaTemplate).send(anyString(), anyString());
     }
 
@@ -76,7 +76,7 @@ class ParserWorkerTest {
 
         worker.consume(record);
 
-        verify(auditLogRepository).saveRawLog(any(), any(), any(), any(), any(), any());
+        verify(auditLogRepository).saveRawLog(any(), any(), any(), any(), any(), any(), any());
         verify(kafkaTemplate).send(anyString(), anyString());
     }
 
@@ -87,7 +87,7 @@ class ParserWorkerTest {
 
         worker.consume(record);
 
-        verify(auditLogRepository).saveRawLog(any(), any(), any(), any(), any(), any());
+        verify(auditLogRepository).saveRawLog(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -97,7 +97,7 @@ class ParserWorkerTest {
 
         worker.consume(record);
 
-        verify(auditLogRepository).saveRawLog(any(), any(), any(), any(), any(), any());
+        verify(auditLogRepository).saveRawLog(any(), any(), any(), any(), any(), any(), any());
     }
 
     // ── Free-text path (LLM async) ────────────────────────────────────────────
@@ -146,7 +146,7 @@ class ParserWorkerTest {
     void consumeDoesNotThrowOnAuditSaveError() {
         String json = "{\"eventType\":\"AUTHENTICATION\",\"username\":\"admin\",\"workstation\":\"WIN-PC01\"}";
         ConsumerRecord<String, String> record = new ConsumerRecord<>("raw-logs", 0, 0L, "windows", json);
-        doThrow(new RuntimeException("mongo down")).when(auditLogRepository).saveRawLog(any(), any(), any(), any(), any(), any());
+        doThrow(new RuntimeException("mongo down")).when(auditLogRepository).saveRawLog(any(), any(), any(), any(), any(), any(), any());
 
         worker.consume(record); // must not propagate exception
     }
@@ -158,7 +158,7 @@ class ParserWorkerTest {
 
         worker.consume(record);
 
-        verify(auditLogRepository).saveRawLog(any(), isNull(), any(), any(), any(), any());
+        verify(auditLogRepository).saveRawLog(any(), isNull(), any(), any(), any(), any(), any());
     }
 
     @Test
