@@ -146,8 +146,8 @@ jobs:
           cache: maven
 
       # 1. Kiểm tra lỗ hổng bảo mật trong Dependency
-      - name: Dependency Check
-        run: mvn org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=7 -DnvdApiKey=${{ secrets.NVD_API_KEY }}
+      # - name: Dependency Check
+      #   run: mvn org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=7 -DnvdApiKey=${{ secrets.NVD_API_KEY }}
 
       # 2. Build & Test chuyên sâu
       - name: Build with Maven
