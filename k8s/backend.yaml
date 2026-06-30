@@ -12,6 +12,10 @@ spec:
     metadata:
       labels:
         app: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080" # Cổng mà ứng dụng của bạn trả về metrics
+        prometheus.io/path: "/actuator/prometheus" #
     spec:
       containers:
         - name: backend

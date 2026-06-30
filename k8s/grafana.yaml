@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: soc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "admin123"
+        volumeMounts:
+        # Mount thư mục provisioning vào đúng nơi Grafana quy định
+        - name: config-provisioning
+          mountPath: /etc/grafana/provisioning
+        # Mount thư mục chứa file .json dashboard
+        - name: dashboard-files
+          mountPath: /var/lib/grafana/dashboards
+      volumes:
+      # Bạn cần tạo ConfigMap tương ứng cho 2 thư mục này
+      - name: config-provisioning
+        configMap:
+          name: grafana-provisioning-cm
+      - name: dashboard-files
+        configMap:
+          name: grafana-dashboards-cm
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: soc
+spec:
+  selector:
+    app: grafana
+  ports:
+    - port: 80
+      targetPort: 3000

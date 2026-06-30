@@ -710,6 +710,7 @@ kubectl apply -f k8s/02-configmap.yaml
 kubectl apply -f k8s/redis.yaml -f k8s/mongodb.yaml -f k8s/neo4j.yaml
 kubectl apply -f k8s/kafka.yaml -f k8s/minio.yaml
 kubectl apply -f k8s/backend.yaml -f k8s/frontend.yaml
+kubectl apply -f k8s/prometheus.yaml -f k8s/grafana.yaml
 kubectl apply -f k8s/ingress.yaml
 
 # 5. Kiểm tra pods
