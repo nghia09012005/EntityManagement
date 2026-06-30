@@ -36,7 +36,7 @@ public class DlqWorker {
             String originalPayload  = (String) msg.getOrDefault("originalPayload", "");
             String error            = (String) msg.getOrDefault("error", "unknown");
             String errorClass       = (String) msg.getOrDefault("errorClass", "Exception");
-            String tenantId         = extractTenantId(originalPayload);
+            String tenantId         = extractTenantId(msg, originalPayload);
 
             DlqEvent event = DlqEvent.builder()
                     .id(UUID.randomUUID().toString())
@@ -63,7 +63,9 @@ public class DlqWorker {
         }
     }
 
-    private String extractTenantId(String payload) {
+    private String extractTenantId(Map<String, Object> msg, String payload) {
+        Object wrapperTenantId = msg.get("tenantId");
+        if (wrapperTenantId instanceof String s && !s.isBlank()) return s;
         if (payload == null || payload.isBlank()) return "default";
         try {
             com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(payload);

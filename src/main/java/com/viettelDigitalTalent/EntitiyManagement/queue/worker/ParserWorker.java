@@ -111,8 +111,12 @@ public class ParserWorker {
                 // Free-text: chạy LLM async rồi mới publish normalized-events
                 CompletableFuture.runAsync(() -> {
                     try {
-                        AlertEvent llmResult = llmProcess.extractAlert(rawJson);
+                        AlertEvent llmResult = llmProcess.extractAlert(rawPayload);
                         if (llmResult != null) {
+                            alertEvent.setActivityId(llmResult.getActivityId());
+                            alertEvent.setSeverityId(llmResult.getSeverityId());
+                            alertEvent.setTime(llmResult.getTime());
+                            alertEvent.setMessage(llmResult.getMessage());
                             if (llmResult.getAlertName()   != null) alertEvent.setAlertName(llmResult.getAlertName());
                             if (llmResult.getSeverity()    != null) alertEvent.setSeverity(llmResult.getSeverity());
                             if (llmResult.getDescription() != null) alertEvent.setDescription(llmResult.getDescription());
@@ -121,31 +125,35 @@ public class ParserWorker {
                             alertEvent.setTargetHost(llmResult.getTargetHost());
                             alertEvent.setTargetDomain(llmResult.getTargetDomain());
                             alertEvent.setTargetFileHash(llmResult.getTargetFileHash());
+                            alertEvent.setTargetUrl(llmResult.getTargetUrl());
+                            alertEvent.setTargetCloudResourceId(llmResult.getTargetCloudResourceId());
+                            alertEvent.setTargetEmail(llmResult.getTargetEmail());
+                            alertEvent.setTargetCve(llmResult.getTargetCve());
                         }
-                        publishNormalized(alertEvent, rawPayload);
+                        publishNormalized(alertEvent, rawPayload, finalTenantId);
                     } catch (Exception e) {
                         log.error("[ParserWorker] Lỗi LLM cho ID: {}", eventId, e);
-                        deadLetterPublisher.publish(KafkaTopicConstants.RAW_LOGS, rawPayload, e);
+                        deadLetterPublisher.publish(KafkaTopicConstants.RAW_LOGS, rawPayload, finalTenantId, e);
                     }
                 }, taskExecutor);
             } else {
-                publishNormalized(event, rawPayload);
+                publishNormalized(event, rawPayload, finalTenantId);
             }
 
         } catch (Exception e) {
             log.error("Lỗi parse log từ {}: {}", source, e.getMessage());
-            deadLetterPublisher.publish(KafkaTopicConstants.RAW_LOGS, rawPayload, e);
+            deadLetterPublisher.publish(KafkaTopicConstants.RAW_LOGS, rawPayload, finalTenantId, e);
         }
     }
 
-    private void publishNormalized(BaseEvent event, String originalRaw) {
+    private void publishNormalized(BaseEvent event, String originalRaw, String tenantId) {
         try {
             String payload = objectMapper.writeValueAsString(event);
             kafkaTemplate.send(KafkaTopicConstants.NORMALIZED_EVENTS, payload);
             log.info("[ParserWorker] Published to normalized-events, ID: {}", event.getEventId());
         } catch (Exception e) {
             log.error("[ParserWorker] Lỗi publish normalized event ID: {}", event.getEventId(), e);
-            deadLetterPublisher.publish(KafkaTopicConstants.RAW_LOGS, originalRaw, e);
+            deadLetterPublisher.publish(KafkaTopicConstants.RAW_LOGS, originalRaw, tenantId, e);
         }
     }
 

@@ -83,6 +83,40 @@ class ParserDispatcherTest {
     }
 
     @Test
+    void autoDetectsOcsfAuthenticationWithoutEventTypeByClassUid() {
+        when(windowsParser.parse(anyString())).thenReturn(new AuthenticationEvent());
+        BaseEvent event = dispatcher.autoDetect("""
+                {"class_uid":3002,"category_uid":3,"activity_id":1,"severity_id":1,
+                 "actor":{"user":{"name":"admin"}},
+                 "src_endpoint":{"ip":"10.0.0.1"},
+                 "dst_endpoint":{"hostname":"WIN-PC01"},
+                 "status_id":1}
+                """);
+        assertThat(event).isInstanceOf(AuthenticationEvent.class);
+    }
+
+    @Test
+    void autoDetectsOcsfNetworkWithoutEventTypeByNestedEndpoints() {
+        when(networkParser.parse(anyString())).thenReturn(new NetworkEvent());
+        BaseEvent event = dispatcher.autoDetect("""
+                {"severity":"INFO",
+                 "src_endpoint":{"ip":"10.0.0.1"},
+                 "dst_endpoint":{"ip":"8.8.8.8","port":53}}
+                """);
+        assertThat(event).isInstanceOf(NetworkEvent.class);
+    }
+
+    @Test
+    void autoDetectsOcsfAlertWithoutEventTypeByFinding() {
+        when(alertParser.parse(anyString())).thenReturn(new AlertEvent());
+        BaseEvent event = dispatcher.autoDetect("""
+                {"class_uid":2001,"finding":{"title":"Brute Force","desc":"Failed logins"},
+                 "dst_endpoint":{"ip":"1.2.3.4"}}
+                """);
+        assertThat(event).isInstanceOf(AlertEvent.class);
+    }
+
+    @Test
     void parseBySourceWindowsRoutesToWindowsParser() {
         when(windowsParser.parse(anyString())).thenReturn(new AuthenticationEvent());
         BaseEvent event = dispatcher.parse("windows", "{\"user\":\"admin\"}");

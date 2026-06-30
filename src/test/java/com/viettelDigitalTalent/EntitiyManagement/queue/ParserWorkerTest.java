@@ -183,6 +183,20 @@ class ParserWorkerTest {
 
         worker.consume(record);
 
-        verify(deadLetterPublisher).publish(anyString(), anyString(), any(Exception.class));
+        verify(deadLetterPublisher).publish(anyString(), anyString(), nullable(String.class), any(Exception.class));
+    }
+
+    @Test
+    void consumeUnknownEnvelopePayload_sendsTenantToDeadLetter() {
+        String payload = "{\"foo\":\"bar\"}";
+        String envelope = "{\"tenantId\":\"tenant-123\",\"payload\":\""
+                + payload.replace("\"", "\\\"")
+                + "\"}";
+        when(parserDispatcher.autoDetect(payload)).thenThrow(new IllegalArgumentException("Unknown log format"));
+
+        ConsumerRecord<String, String> record = new ConsumerRecord<>("raw-logs", 0, 0L, "api", envelope);
+        worker.consume(record);
+
+        verify(deadLetterPublisher).publish(eq("raw-logs"), eq(payload), eq("tenant-123"), any(Exception.class));
     }
 }

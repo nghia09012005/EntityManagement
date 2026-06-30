@@ -111,6 +111,19 @@ class DlqWorkerTest {
     }
 
     @Test
+    void consume_usesTenantIdFromDlqMessageBeforeOriginalPayload() {
+        String msg = "{\"sourceTopic\":\"raw-logs\",\"tenantId\":\"tenant-from-wrapper\","
+                + "\"originalPayload\":\"{\\\"foo\\\":\\\"bar\\\"}\","
+                + "\"error\":\"err\",\"errorClass\":\"Exception\"}";
+
+        worker.consume(record(msg));
+
+        ArgumentCaptor<DlqEvent> captor = ArgumentCaptor.forClass(DlqEvent.class);
+        verify(dlqEventRepository).save(captor.capture());
+        assertThat(captor.getValue().getTenantId()).isEqualTo("tenant-from-wrapper");
+    }
+
+    @Test
     void consume_defaultsTenantIdWhenMissing() {
         String msg = "{\"sourceTopic\":\"raw-logs\",\"originalPayload\":\"{}\",\"error\":\"err\",\"errorClass\":\"Exception\"}";
 

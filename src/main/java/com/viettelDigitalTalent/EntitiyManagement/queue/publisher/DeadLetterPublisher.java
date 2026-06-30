@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import static com.viettelDigitalTalent.EntitiyManagement.queue.config.KafkaTopicConstants.DEAD_LETTER_QUEUE;
@@ -20,12 +21,18 @@ public class DeadLetterPublisher {
     private final ObjectMapper objectMapper;
 
     public void publish(String sourceTopic, String originalPayload, Exception ex) {
-        Map<String, Object> dlqMessage = Map.of(
-            "sourceTopic",     sourceTopic,
-            "originalPayload", originalPayload != null ? originalPayload : "",
-            "error",           ex.getMessage() != null ? ex.getMessage() : "unknown",
-            "errorClass",      ex.getClass().getSimpleName()
-        );
+        publish(sourceTopic, originalPayload, null, ex);
+    }
+
+    public void publish(String sourceTopic, String originalPayload, String tenantId, Exception ex) {
+        Map<String, Object> dlqMessage = new HashMap<>();
+        dlqMessage.put("sourceTopic", sourceTopic);
+        dlqMessage.put("originalPayload", originalPayload != null ? originalPayload : "");
+        dlqMessage.put("error", ex.getMessage() != null ? ex.getMessage() : "unknown");
+        dlqMessage.put("errorClass", ex.getClass().getSimpleName());
+        if (tenantId != null && !tenantId.isBlank()) {
+            dlqMessage.put("tenantId", tenantId);
+        }
         try {
             kafkaTemplate.send(DEAD_LETTER_QUEUE, objectMapper.writeValueAsString(dlqMessage));
             log.warn("[DLQ] Published failed event from topic '{}': {}", sourceTopic, ex.getMessage());

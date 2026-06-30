@@ -33,6 +33,41 @@ class LlmOutputValidatorTest {
     }
 
     @Test
+    void validOcsfJsonProducesAlertEvent() {
+        String json = """
+                {
+                  "eventType": "ALERT",
+                  "class_uid": 2001,
+                  "category_uid": 2,
+                  "activity_id": 1,
+                  "severity_id": 4,
+                  "time": 1705714500000,
+                  "severity": "HIGH",
+                  "message": "Multiple failed logins",
+                  "finding": {"title": "Brute Force", "desc": "Multiple failed logins"},
+                  "actor": {"user": {"name": "admin"}},
+                  "dst_endpoint": {"ip": "192.168.1.1", "hostname": "DC01", "domain": "corp.local"},
+                  "process": {"file": {"hashes": [{"algorithm_id": 3, "algorithm": "SHA-256", "value": "abc123"}]}},
+                  "source": "syslog"
+                }
+                """;
+        AlertEvent event = validator.validate(json);
+        assertThat(event).isNotNull();
+        assertThat(event.getClassUid()).isEqualTo(2001);
+        assertThat(event.getCategoryUid()).isEqualTo(2);
+        assertThat(event.getActivityId()).isEqualTo(1);
+        assertThat(event.getSeverityId()).isEqualTo(4);
+        assertThat(event.getTime()).isEqualTo(1705714500000L);
+        assertThat(event.getAlertName()).isEqualTo("Brute Force");
+        assertThat(event.getDescription()).isEqualTo("Multiple failed logins");
+        assertThat(event.getTargetIp()).isEqualTo("192.168.1.1");
+        assertThat(event.getTargetUser()).isEqualTo("admin");
+        assertThat(event.getTargetHost()).isEqualTo("DC01");
+        assertThat(event.getTargetDomain()).isEqualTo("corp.local");
+        assertThat(event.getTargetFileHash()).isEqualTo("abc123");
+    }
+
+    @Test
     void stripsMarkdownCodeBlock() {
         String md = "```json\n{\"alertName\":\"Test\",\"severity\":\"LOW\"}\n```";
         AlertEvent event = validator.validate(md);

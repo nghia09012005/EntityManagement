@@ -28,6 +28,7 @@ class WindowsEventParserTest {
         assertThat(event.getIpAddress()).isEqualTo("192.168.1.1");
         assertThat(event.isSuccess()).isTrue();
         assertThat(event.getWorkstation()).isEqualTo("WIN-PC01");
+        assertThat(event.getRawData()).containsEntry("username", "admin");
     }
 
     @Test
@@ -36,6 +37,19 @@ class WindowsEventParserTest {
         AuthenticationEvent event = parser.parse(raw);
         assertThat(event.getUsername()).isEqualTo("attacker");
         assertThat(event.isSuccess()).isFalse();
+    }
+
+    @Test
+    void parsesOcsfFormat() {
+        String raw = "{\"eventType\":\"AUTHENTICATION\",\"class_uid\":3002,\"category_uid\":3,\"activity_id\":1,\"time\":1705281791000,\"status_id\":1,\"status\":\"Success\",\"actor\":{\"user\":{\"name\":\"nghia\"}},\"src_endpoint\":{\"ip\":\"192.168.1.100\"},\"dst_endpoint\":{\"hostname\":\"WIN-PC01\"}}";
+        AuthenticationEvent event = parser.parse(raw);
+        assertThat(event.getUsername()).isEqualTo("nghia");
+        assertThat(event.getIpAddress()).isEqualTo("192.168.1.100");
+        assertThat(event.isSuccess()).isTrue();
+        assertThat(event.getWorkstation()).isEqualTo("WIN-PC01");
+        assertThat(event.getTimestamp()).isNotNull();
+        assertThat(event.getRawData()).containsEntry("username", "nghia");
+        assertThat(event.getRawData()).containsEntry("ipAddress", "192.168.1.100");
     }
 
     @Test

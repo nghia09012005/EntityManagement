@@ -1,46 +1,74 @@
 package com.viettelDigitalTalent.EntitiyManagement.parser.windows;
 
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.viettelDigitalTalent.EntitiyManagement.common.utils.JsonUtils;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.base.EventCategory;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.event.AuthenticationEvent;
 import com.viettelDigitalTalent.EntitiyManagement.parser.core.EventParser;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.yaml.snakeyaml.parser.ParserException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Component
 public class WindowsEventParser implements EventParser {
 
     @Autowired
-    private ObjectMapper objectMapper; // Spring Boot tự động cấu hình sẵn
+    private ObjectMapper objectMapper;
 
     @Override
     public AuthenticationEvent parse(String rawData) {
         try {
-            // Đọc rawData thành cây JsonNode
             JsonNode root = objectMapper.readTree(rawData);
+            AuthenticationEvent event;
 
-            AuthenticationEvent event = new AuthenticationEvent();
+            if (root.has("actor") || root.has("src_endpoint") || root.has("dst_endpoint") || root.has("class_uid")) {
+                // Thêm eventType nếu chưa có
+                if (!root.has("eventType")) {
+                    ((ObjectNode) root).put("eventType", "AUTHENTICATION");
+                }
+                event = objectMapper.treeToValue(root, AuthenticationEvent.class);
+            } else {
+                event = new AuthenticationEvent();
+                event.setUsername(JsonUtils.extractValue(root, "user", "username", "accountName"));
+                event.setIpAddress(JsonUtils.extractValue(root, "ip", "sourceIp", "client_ip", "ipAddress"));
+                event.setWorkstation(JsonUtils.extractValue(root, "workstation", "hostname", "host", "computer"));
 
-            // Sử dụng tiện ích extractValue để lấy dữ liệu an toàn
-            // Không sợ bị NullPointerException nếu trường không tồn tại
-            event.setUsername(JsonUtils.extractValue(root, "user", "username", "accountName"));
-            event.setIpAddress(JsonUtils.extractValue(root, "ip", "sourceIp", "client_ip"));
-            event.setWorkstation(JsonUtils.extractValue(root, "workstation", "hostname", "host", "computer"));
+                boolean success = false;
+                if (root.has("is_success")) {
+                    success = root.get("is_success").asBoolean();
+                } else if (root.has("success")) {
+                    success = root.get("success").asBoolean();
+                }
+                event.setSuccess(success);
 
-            boolean success = root.has("is_success") ? root.get("is_success").asBoolean() : false;
-            event.setSuccess(success);
+                // Parse ISO 8601 timestamp if provided, otherwise use now
+                String tsRaw = JsonUtils.extractValue(root, "timestamp", "time", "eventTime");
+                if (tsRaw != null) {
+                    try {
+                        event.setTimestamp(LocalDateTime.ofInstant(Instant.parse(tsRaw), ZoneId.systemDefault()));
+                    } catch (Exception ignored) {
+                        event.setTimestamp(LocalDateTime.now());
+                    }
+                } else {
+                    event.setTimestamp(LocalDateTime.now());
+                }
 
-            event.setTimestamp(LocalDateTime.now());
-            event.setCategory(EventCategory.AUTHENTICATION.name()); // Gán category chuẩn
+                event.setCategory(EventCategory.AUTHENTICATION.name());
+            }
+
+            // Always populate rawData for downstream workers
+            if (event.getUsername() != null) event.getRawData().put("username", event.getUsername());
+            if (event.getIpAddress() != null) event.getRawData().put("ipAddress", event.getIpAddress());
+            if (event.getWorkstation() != null) event.getRawData().put("workstation", event.getWorkstation());
+            event.getRawData().put("success", event.isSuccess());
 
             return event;
         } catch (Exception e) {
-            // Ném ra exception riêng của hệ thống SOC
             throw new RuntimeException("Lỗi khi parse Windows Log bằng Jackson: " + e.getMessage());
         }
     }

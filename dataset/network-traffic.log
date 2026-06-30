@@ -1,16 +1,16 @@
-{"eventType":"NETWORK","srcIp":"192.168.1.100","dstIp":"185.220.101.42","dstPort":4444,"dstDomain":"evil-c2.onion.ws","timestamp":"2024-01-15T03:22:00Z"}
-{"eventType":"NETWORK","srcIp":"192.168.1.101","dstIp":"185.220.101.42","dstPort":443,"dstDomain":"evil-c2.onion.ws","timestamp":"2024-01-15T03:24:00Z"}
-{"eventType":"NETWORK","srcIp":"192.168.1.100","dstIp":"203.0.113.10","dstPort":80,"dstDomain":"phish-bank.tk","timestamp":"2024-01-15T14:05:00Z"}
-{"eventType":"NETWORK","srcIp":"10.0.0.20","dstIp":"91.108.4.1","dstPort":8080,"dstDomain":"malware-download.net","timestamp":"2024-01-15T15:00:00Z"}
-{"eventType":"NETWORK","srcIp":"192.168.1.101","dstIp":"192.168.1.100","dstPort":445,"timestamp":"2024-01-15T03:20:00Z"}
-{"eventType":"NETWORK","srcIp":"192.168.1.100","dstIp":"10.0.0.20","dstPort":3389,"timestamp":"2024-01-15T03:28:00Z"}
-{"eventType":"NETWORK","srcIp":"10.0.0.5","dstIp":"91.108.4.1","dstPort":443,"dstDomain":"c2-server.ru","timestamp":"2024-01-16T02:10:00Z"}
-{"eventType":"NETWORK","srcIp":"192.168.1.100","dstIp":"8.8.8.8","dstPort":53,"dstDomain":"evil-c2.onion.ws.","timestamp":"2024-01-16T03:00:00Z"}
-{"eventType":"NETWORK","srcIp":"192.168.1.100","dstIp":"8.8.8.8","dstPort":53,"dstDomain":"evil-c2.onion.ws.","timestamp":"2024-01-16T03:00:30Z"}
-{"eventType":"NETWORK","srcIp":"192.168.1.100","dstIp":"8.8.8.8","dstPort":53,"dstDomain":"evil-c2.onion.ws.","timestamp":"2024-01-16T03:01:00Z"}
-{"eventType":"NETWORK","srcIp":"192.168.1.100","dstIp":"8.8.8.8","dstPort":53,"dstDomain":"evil-c2.onion.ws.","timestamp":"2024-01-16T03:01:30Z"}
-{"eventType":"NETWORK","srcIp":"10.0.0.20","dstIp":"45.33.32.156","dstPort":22,"timestamp":"2024-01-16T10:00:00Z"}
-{"eventType":"NETWORK","srcIp":"45.33.32.156","dstIp":"10.0.0.5","dstPort":3389,"dstDomain":"phish-bank.tk.","timestamp":"2024-01-16T10:05:00Z"}
-{"eventType":"NETWORK","srcIp":"192.168.1.101","dstIp":"203.0.113.10","dstPort":443,"dstDomain":"microsoft.com","timestamp":"2024-01-17T09:00:00Z"}
-{"eventType":"NETWORK","srcIp":"192.168.1.100","dstIp":"192.168.1.101","dstPort":80,"dstDomain":"github.com","timestamp":"2024-01-17T09:05:00Z"}
-{"eventType":"NETWORK","srcIp":"::ffff:192.168.1.100","dstIp":"185.220.101.42","dstPort":4444,"dstDomain":"evil-c2.onion.ws","timestamp":"2024-01-17T03:00:00Z"}
+{"eventType": "NETWORK", "class_uid": 4001, "category_uid": 4, "activity_id": 1, "severity_id": 1, "time": 1705263720000, "severity": "INFO", "src_endpoint": {"ip": "192.168.1.100"}, "dst_endpoint": {"ip": "185.220.101.42", "domain": "evil-c2.onion.ws", "port": 4444}}
+{"eventType": "NETWORK", "class_uid": 4001, "category_uid": 4, "activity_id": 1, "severity_id": 1, "time": 1705263840000, "severity": "INFO", "src_endpoint": {"ip": "192.168.1.101"}, "dst_endpoint": {"ip": "185.220.101.42", "domain": "evil-c2.onion.ws", "port": 443}}
+{"eventType": "NETWORK", "class_uid": 4001, "category_uid": 4, "activity_id": 1, "severity_id": 1, "time": 1705302300000, "severity": "INFO", "src_endpoint": {"ip": "192.168.1.100"}, "dst_endpoint": {"ip": "203.0.113.10", "domain": "phish-bank.tk", "port": 80}}
+{"eventType": "NETWORK", "class_uid": 4001, "category_uid": 4, "activity_id": 1, "severity_id": 1, "time": 1705305600000, "severity": "INFO", "src_endpoint": {"ip": "10.0.0.20"}, "dst_endpoint": {"ip": "91.108.4.1", "domain": "malware-download.net", "port": 8080}}
+{"eventType": "NETWORK", "class_uid": 4001, "category_uid": 4, "activity_id": 1, "severity_id": 1, "time": 1705263600000, "severity": "INFO", "src_endpoint": {"ip": "192.168.1.101"}, "dst_endpoint": {"ip": "192.168.1.100", "port": 445}}
+{"eventType": "NETWORK", "class_uid": 4001, "category_uid": 4, "activity_id": 1, "severity_id": 1, "time": 1705264080000, "severity": "INFO", "src_endpoint": {"ip": "192.168.1.100"}, "dst_endpoint": {"ip": "10.0.0.20", "port": 3389}}
+{"eventType": "NETWORK", "class_uid": 4001, "category_uid": 4, "activity_id": 1, "severity_id": 1, "time": 1705345800000, "severity": "INFO", "src_endpoint": {"ip": "10.0.0.5"}, "dst_endpoint": {"ip": "91.108.4.1", "domain": "c2-server.ru", "port": 443}}
+{"eventType": "NETWORK", "class_uid": 4001, "category_uid": 4, "activity_id": 1, "severity_id": 1, "time": 1705348800000, "severity": "INFO", "src_endpoint": {"ip": "192.168.1.100"}, "dst_endpoint": {"ip": "8.8.8.8", "domain": "evil-c2.onion.ws.", "port": 53}}
+{"eventType": "NETWORK", "class_uid": 4001, "category_uid": 4, "activity_id": 1, "severity_id": 1, "time": 1705348830000, "severity": "INFO", "src_endpoint": {"ip": "192.168.1.100"}, "dst_endpoint": {"ip": "8.8.8.8", "domain": "evil-c2.onion.ws.", "port": 53}}
+{"eventType": "NETWORK", "class_uid": 4001, "category_uid": 4, "activity_id": 1, "severity_id": 1, "time": 1705348860000, "severity": "INFO", "src_endpoint": {"ip": "192.168.1.100"}, "dst_endpoint": {"ip": "8.8.8.8", "domain": "evil-c2.onion.ws.", "port": 53}}
+{"eventType": "NETWORK", "class_uid": 4001, "category_uid": 4, "activity_id": 1, "severity_id": 1, "time": 1705348890000, "severity": "INFO", "src_endpoint": {"ip": "192.168.1.100"}, "dst_endpoint": {"ip": "8.8.8.8", "domain": "evil-c2.onion.ws.", "port": 53}}
+{"eventType": "NETWORK", "class_uid": 4001, "category_uid": 4, "activity_id": 1, "severity_id": 1, "time": 1705374000000, "severity": "INFO", "src_endpoint": {"ip": "10.0.0.20"}, "dst_endpoint": {"ip": "45.33.32.156", "port": 22}}
+{"eventType": "NETWORK", "class_uid": 4001, "category_uid": 4, "activity_id": 1, "severity_id": 1, "time": 1705374300000, "severity": "INFO", "src_endpoint": {"ip": "45.33.32.156"}, "dst_endpoint": {"ip": "10.0.0.5", "domain": "phish-bank.tk.", "port": 3389}}
+{"eventType": "NETWORK", "class_uid": 4001, "category_uid": 4, "activity_id": 1, "severity_id": 1, "time": 1705456800000, "severity": "INFO", "src_endpoint": {"ip": "192.168.1.101"}, "dst_endpoint": {"ip": "203.0.113.10", "domain": "microsoft.com", "port": 443}}
+{"eventType": "NETWORK", "class_uid": 4001, "category_uid": 4, "activity_id": 1, "severity_id": 1, "time": 1705457100000, "severity": "INFO", "src_endpoint": {"ip": "192.168.1.100"}, "dst_endpoint": {"ip": "192.168.1.101", "domain": "github.com", "port": 80}}
+{"eventType": "NETWORK", "class_uid": 4001, "category_uid": 4, "activity_id": 1, "severity_id": 1, "time": 1705435200000, "severity": "INFO", "src_endpoint": {"ip": "::ffff:192.168.1.100"}, "dst_endpoint": {"ip": "185.220.101.42", "domain": "evil-c2.onion.ws", "port": 4444}}
