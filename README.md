@@ -71,8 +71,9 @@ Bên cạnh đó, nền tảng cung cấp khả năng trực quan hóa quan hệ
 
 ## Workflow
 
+![Data flow diagram](DFD.png)
 
-```
+<!-- ```
                 +------------------+
                 | API / File Upload|
                 +---------+--------+
@@ -127,7 +128,7 @@ Bên cạnh đó, nền tảng cung cấp khả năng trực quan hóa quan hệ
                                     |
                                     v
                          Investigation & Hunting
-```
+``` -->
 
 
 1. **Ingestion**

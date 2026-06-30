@@ -37,7 +37,7 @@ public class CorrelationWorker {
 
         String tenantId = extractTenantId(payload);
 
-        // windowStart snapped to current hour for dedup
+        // windowStart snapped to current hour for dedup (window size = 30p)
         LocalDateTime windowStart = LocalDateTime.now().truncatedTo(ChronoUnit.HOURS);
         LocalDateTime since = windowStart.minusMinutes(WINDOW_MINUTES);
 
