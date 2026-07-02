@@ -25,9 +25,7 @@ spec:
             - containerPort: 8080
           env:
             - name: JAVA_TOOL_OPTIONS
-              value: "-Xmx512m -Dspring.main.banner-mode=off -Ddebug=true"
-            - name: JAVA_TOOL_OPTIONS
-              value: "-Xmx512m -XX:MaxRAMPercentage=75.0"
+              value: "-Xmx512m -XX:MaxRAMPercentage=75.0 -Dspring.main.banner-mode=off -Ddebug=true"
             # Mount thêm config K8s vào Spring Boot
             - name: SPRING_CONFIG_ADDITIONAL_LOCATION
               value: file:/app/config/
@@ -74,4 +72,6 @@ spec:
   selector:
     app: backend
   ports:
-    - port: 8080
+    - name: web # Nên đặt tên port
+      port: 8080
+      targetPort: 8080
