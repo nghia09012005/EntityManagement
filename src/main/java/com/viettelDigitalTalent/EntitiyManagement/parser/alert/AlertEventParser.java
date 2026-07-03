@@ -34,6 +34,21 @@ public class AlertEventParser implements EventParser {
                 event = objectMapper.treeToValue(root, AlertEvent.class);
             } else {
                 event = new AlertEvent();
+
+                // --------------------------------src endpoint--------------------------------
+                event.setSourceIp(
+                        JsonUtils.extractValue(
+                                root,
+                                "sourceIp",
+                                "source_ip",
+                                "src_ip",
+                                "srcIp",
+                                "attackerIp",
+                                "clientIp"
+                        )
+                );
+                //----------------------------------------------------------------
+
                 event.setAlertName(JsonUtils.extractValue(root, "alertName", "alert_name", "name", "title"));
                 event.setSeverity(JsonUtils.extractValue(root, "severity", "level"));
                 event.setDescription(JsonUtils.extractValue(root, "description", "desc", "message"));
@@ -85,6 +100,11 @@ public class AlertEventParser implements EventParser {
             if (event.getTargetCloudResourceId() != null) event.getRawData().put("targetCloudResourceId", event.getTargetCloudResourceId());
             if (event.getTargetEmail() != null) event.getRawData().put("targetEmail", event.getTargetEmail());
             if (event.getTargetCve() != null) event.getRawData().put("targetCve", event.getTargetCve());
+
+            //--------------------------------src endpoint--------------------------------
+            if (event.getSourceIp() != null)
+                event.getRawData().put("sourceIp", event.getSourceIp());
+            //----------------------------------------------------------------
 
             return event;
         } catch (Exception e) {

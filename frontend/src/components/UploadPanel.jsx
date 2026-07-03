@@ -91,7 +91,7 @@ export default function UploadPanel({ onUploaded }) {
       <div className="upload-panel" style={{ flex: 1 }}>
         <div style={{ padding: '12px 14px' }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: '#a0aec0', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            Nhập Alert (Free Text)
+            Input log
           </div>
           <textarea
             value={alertText}
@@ -114,12 +114,12 @@ export default function UploadPanel({ onUploaded }) {
               onClick={handleSendAlert}
               style={{ opacity: !alertText.trim() ? 0.4 : 1 }}
             >
-              {alertStatus === 'sending' ? 'Đang gửi…' : 'Gửi Alert'}
+              {alertStatus === 'sending' ? 'Đang gửi…' : 'Gửi '}
             </button>
           </div>
           {alertStatus && alertStatus !== 'sending' && (
             <div className={`upload-result ${alertStatus.ok ? 'ok' : 'err'}`} style={{ marginTop: 8 }}>
-              {alertStatus.ok ? '✓ Alert đã gửi vào pipeline (LLM sẽ xử lý)' : `✗ ${alertStatus.msg}`}
+              {alertStatus.ok ? '✓  Đã gửi vào pipeline ' : `✗ ${alertStatus.msg}`}
             </div>
           )}
         </div>

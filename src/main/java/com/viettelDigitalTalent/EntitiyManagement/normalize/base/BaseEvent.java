@@ -25,7 +25,7 @@ import java.util.Map;
 @JsonSubTypes({
     @JsonSubTypes.Type(value = com.viettelDigitalTalent.EntitiyManagement.normalize.event.AuthenticationEvent.class, name = "AUTHENTICATION"),
     @JsonSubTypes.Type(value = com.viettelDigitalTalent.EntitiyManagement.normalize.event.ProcessEvent.class,       name = "PROCESS"),
-    @JsonSubTypes.Type(value = com.viettelDigitalTalent.EntitiyManagement.normalize.alert.AlertEvent.class,          name = "ALERT"),
+    @JsonSubTypes.Type(value = com.viettelDigitalTalent.EntitiyManagement.normalize.alert.AlertEvent.class,          name = "THREAT"),
     @JsonSubTypes.Type(value = com.viettelDigitalTalent.EntitiyManagement.normalize.event.NetworkEvent.class,       name = "NETWORK")
 })
 public class BaseEvent {

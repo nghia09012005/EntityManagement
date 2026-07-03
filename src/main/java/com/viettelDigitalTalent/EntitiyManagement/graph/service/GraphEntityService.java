@@ -269,6 +269,32 @@ public class GraphEntityService {
                     """).bindAll(p).run();
         }
 
+        //------------------------------ srcIP------------------------------
+        String srcIp = EntityNormalizer.ip(e.getSourceIp()); // Có thể là null
+        // 2. Chỉ lưu srcIp nếu nó tồn tại (Tùy chọn)
+        if (srcIp != null && targetIp != null) {
+            Map<String, Object> netParams = new HashMap<>();
+            netParams.put("srcIp", srcIp);
+            netParams.put("dstIp", targetIp);
+            netParams.put("now", now.toString());
+            netParams.put("eventId", eventId);
+            netParams.put("tenantId", tl);
+
+            neo4jClient.query("""
+            MERGE (src:IP {tenantId: $tenantId, address: $srcIp})
+            MERGE (dst:IP {tenantId: $tenantId, address: $dstIp})
+            MERGE (src)-[r:CONNECTED_TO]->(dst)
+            ON CREATE SET r.firstSeen = $now, r.lastSeen = $now, r.count = 1,
+                          r.firstEventId = $eventId, r.lastEventId = $eventId
+            ON MATCH SET r.lastSeen = $now, r.count = r.count + 1, r.lastEventId = $eventId
+        """).bindAll(netParams).run();
+        }
+
+        //------------------------------------------------------------------
+
+
+
+
         if (targetFileHash != null && targetIp != null) {
             Map<String, Object> p = new HashMap<>();
             p.put("hash",    targetFileHash);

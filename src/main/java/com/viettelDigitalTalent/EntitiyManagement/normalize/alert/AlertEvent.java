@@ -18,7 +18,7 @@ import java.util.List;
  */
 @EqualsAndHashCode(callSuper = true)
 @Data
-@JsonTypeName("ALERT")
+@JsonTypeName("THREAT")
 public class AlertEvent extends BaseEvent {
 
     @JsonProperty("finding")      private OcsfFinding  finding;
@@ -33,6 +33,31 @@ public class AlertEvent extends BaseEvent {
     @JsonProperty("cve_uid") @JsonAlias("targetCve") private String targetCve;
 
     public void setTargetCve(String cve) { this.targetCve = cve; }
+
+
+    // ----------------------------------src endpoint----------------------------------
+    @JsonProperty("src_endpoint")
+    private OcsfEndpoint srcEndpoint;
+
+    @JsonIgnore
+    public String getSourceIp() {
+        return srcEndpoint != null ? srcEndpoint.getIp() : null;
+    }
+
+    private void ensureSrcEndpoint() {
+        if (srcEndpoint == null)
+            srcEndpoint = new OcsfEndpoint();
+    }
+
+    public void setSourceIp(String ip) {
+        if (ip == null) return;
+        ensureSrcEndpoint();
+        srcEndpoint.setIp(ip);
+    }
+
+    // -----------------------------------------------------------
+
+
 
     // ── Convenience bridge ────────────────────────────────────────────────────
 
