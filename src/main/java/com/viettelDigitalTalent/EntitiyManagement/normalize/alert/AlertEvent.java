@@ -55,6 +55,26 @@ public class AlertEvent extends BaseEvent {
         srcEndpoint.setIp(ip);
     }
 
+    @JsonIgnore public String getSourceHost() {
+        return srcEndpoint != null ? srcEndpoint.getHostname() : null;
+    }
+
+    public void setSourceHost(String hostname) {
+        if (hostname == null) return;
+        ensureSrcEndpoint();
+        srcEndpoint.setHostname(hostname);
+    }
+
+    @JsonIgnore public String getSourceDomain() {
+        return srcEndpoint != null ? srcEndpoint.getDomain() : null;
+    }
+
+    public void setSourceDomain(String domain) {
+        if (domain == null) return;
+        ensureSrcEndpoint();
+        srcEndpoint.setDomain(domain);
+    }
+
     // -----------------------------------------------------------
 
 

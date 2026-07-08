@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getNeighbors, fetchEnrichmentByEventId } from '../api'
+import { getNeighbors, fetchEnrichmentByEventId, fetchIncidents } from '../api'
 import EntityBadge from '../components/EntityBadge'
 import GraphView from '../components/GraphView'
+import { findIncidentForEntity } from '../utils/incidents'
 
 const LABEL_MAP = {
   user: 'User', host: 'Host', ip: 'IP',
@@ -146,43 +147,106 @@ export default function EntityDetailPage() {
   const [loading, setLoading]     = useState(true)
   const [hops, setHops]           = useState(1)
   const [enrichment, setEnrichment] = useState({})
+  const [incidentInfo, setIncidentInfo] = useState(null)
 
   const label   = LABEL_MAP[type] || type
   const decoded = decodeURIComponent(value)
+  const relatedEventId = graph?.edges
+    ?.map(e => e.properties?.lastEventId || e.properties?.firstEventId)
+    .find(id => !!id)
 
   useEffect(() => {
-    setLoading(true)
-    getNeighbors(type, decoded, hops)
-      .then(setGraph)
-      .catch(() => setGraph(null))
-      .finally(() => setLoading(false))
+    let active = true
+    const loadGraph = async () => {
+      if (active) setLoading(true)
+      try {
+        const data = await getNeighbors(type, decoded, hops)
+        if (active) setGraph(data)
+      } catch {
+        if (active) setGraph(null)
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+
+    loadGraph()
+    return () => { active = false }
   }, [type, decoded, hops])
 
   useEffect(() => {
-    if (type !== 'ip' && type !== 'filehash') { setEnrichment({}); return }
-    if (!graph?.edges?.length) return
-    const eventId = graph.edges
-      .map(e => e.properties?.lastEventId)
-      .find(id => !!id)
-    if (!eventId) return
-    fetchEnrichmentByEventId(eventId).then(setEnrichment).catch(() => setEnrichment({}))
+    let active = true
+    const loadEnrichment = async () => {
+      if (type !== 'ip' && type !== 'filehash') {
+        if (active) setEnrichment({})
+        return
+      }
+      if (!graph?.edges?.length) return
+      const eventId = graph.edges
+        .map(e => e.properties?.lastEventId)
+        .find(id => !!id)
+      if (!eventId) return
+      try {
+        const data = await fetchEnrichmentByEventId(eventId)
+        if (active) setEnrichment(data)
+      } catch {
+        if (active) setEnrichment({})
+      }
+    }
+
+    loadEnrichment()
+    return () => { active = false }
   }, [type, graph])
+
+  useEffect(() => {
+    let active = true
+    const loadIncidentInfo = async () => {
+      if (!type || !decoded) {
+        if (active) setIncidentInfo(null)
+        return
+      }
+      try {
+        const data = await fetchIncidents(0, 100)
+        if (!active) return
+        const match = findIncidentForEntity(data.content || [], type, decoded)
+        if (active) setIncidentInfo(match ? { id: match.id, status: match.status || 'UNKNOWN' } : null)
+      } catch {
+        if (active) setIncidentInfo(null)
+      }
+    }
+
+    loadIncidentInfo()
+    return () => { active = false }
+  }, [type, decoded])
 
   const sourceNode = graph?.nodes?.find(n => n.properties[ID_PROP[type]] === decoded)
   const props = sourceNode?.properties || {}
 
-  const baseProps   = Object.entries(props)
+  const baseProps   = [
+    ...(relatedEventId ? [['eventId', relatedEventId]] : []),
+    ['incidentId', incidentInfo?.id || 'NULL'],
+    ['incidentStatus', incidentInfo?.status || 'NULL'],
+    ...Object.entries(props),
+  ]
   const enrichProps = flattenEnrichment(type, enrichment)
 
-  const neighbors = graph?.edges?.map(e => {
+  const neighbors = (graph?.edges || []).map(e => {
     const isOut      = e.from === sourceNode?.id
     const neighborId = isOut ? e.to : e.from
-    const neighborNode = graph.nodes.find(n => n.id === neighborId)
+    const neighborNode = (graph?.nodes || []).find(n => String(n.id) === String(neighborId))
     return { edge: e, node: neighborNode, direction: isOut ? '→' : '←' }
-  }) || []
+  })
 
   const sameAsLinks   = neighbors.filter(n => n.edge.type === 'SAME_AS')
   const normalLinks   = neighbors.filter(n => n.edge.type !== 'SAME_AS')
+
+  const [relPage, setRelPage] = useState(0)
+  const relPageSize = 8
+  const relPageCount = Math.max(1, Math.ceil(normalLinks.length / relPageSize))
+  const visibleRelations = normalLinks.slice(relPage * relPageSize, (relPage + 1) * relPageSize)
+
+  useEffect(() => {
+    setRelPage(0)
+  }, [graph?.edges?.length])
 
   return (
     <>
@@ -254,7 +318,7 @@ export default function EntityDetailPage() {
                     const nType = nLabel?.toLowerCase()
                     const p = item.edge.properties || {}
                     return (
-                      <tr key={i} style={{ background: '#130d1f' }}>
+                      <tr key={`${item.edge?.type || 'edge'}-${item.edge?.from || 'from'}-${item.edge?.to || 'to'}-${i}`} style={{ background: '#130d1f' }}>
                         <td style={{ color: '#b794f4' }}>{item.direction}</td>
                         <td>
                           <EntityBadge label={nLabel} />{' '}
@@ -278,9 +342,16 @@ export default function EntityDetailPage() {
 
           {/* Relationships */}
           <div className="card">
-            <div className="card-header">
+            <div className="card-header" style={{ alignItems: 'center', gap: 12 }}>
               <span className="card-title">Quan hệ</span>
               <span className="card-count">{normalLinks.length} relationships</span>
+              {relPageCount > 1 && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#a0aec0', fontSize: 12 }}>
+                  <button className="gv-btn" style={{ padding: '4px 8px' }} disabled={relPage <= 0} onClick={() => setRelPage(prev => Math.max(prev - 1, 0))}>Prev</button>
+                  <span>Page {relPage + 1} / {relPageCount}</span>
+                  <button className="gv-btn" style={{ padding: '4px 8px' }} disabled={relPage >= relPageCount - 1} onClick={() => setRelPage(prev => Math.min(prev + 1, relPageCount - 1))}>Next</button>
+                </span>
+              )}
             </div>
             {normalLinks.length === 0 ? (
               <div className="empty">Không có quan hệ nào</div>
@@ -293,13 +364,13 @@ export default function EntityDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {normalLinks.map((item, i) => {
+                  {visibleRelations.map((item, i) => {
                     const np    = item.node?.properties || {}
                     const nLabel = item.node?.label
                     const nVal  = np.username || np.hostname || np.address || np.name || np.hash || np.url || np.resourceId || np.cveId || '—'
                     const nType = nLabel?.toLowerCase()
                     return (
-                      <tr key={i}>
+                      <tr key={`${item.edge?.type || 'edge'}-${item.edge?.from || 'from'}-${item.edge?.to || 'to'}-${i}`}>
                         <td>{item.direction}</td>
                         <td><span style={{ color: '#b794f4', fontWeight: 600 }}>{item.edge.type}</span></td>
                         <td>

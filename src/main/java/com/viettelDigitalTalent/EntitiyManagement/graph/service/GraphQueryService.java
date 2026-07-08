@@ -128,7 +128,7 @@ public class GraphQueryService {
                 .all();
 
         if (rows.isEmpty()) {
-            return new PathResponse(List.of(), List.of(), false, 0, 0);
+            return new PathResponse(List.of(), List.of(), false, 0, 0, List.of());
         }
 
         Map<String, NodeDto> nodeMap = new LinkedHashMap<>();
@@ -154,7 +154,41 @@ public class GraphQueryService {
             if (row.get("pathCnt") instanceof Number n) pathCnt = n.intValue();
         }
 
-        return new PathResponse(new ArrayList<>(nodeMap.values()), edges, true, pathCnt, minLen);
+        String pathQuery = String.format("""
+            MATCH (src:%s {tenantId: $tenantId, %s: $fromValue}),
+                  (dst:%s {tenantId: $tenantId, %s: $toValue})
+            MATCH path = %s((src)-[*1..%d]-(dst))
+            WHERE ALL(n IN nodes(path) WHERE n.tenantId = $tenantId)
+            RETURN [x IN nodes(path) | labels(x)[0] + ':' +
+              CASE labels(x)[0]
+                WHEN 'User' THEN x.username
+                WHEN 'Host' THEN x.hostname
+                WHEN 'IP' THEN x.address
+                WHEN 'Domain' THEN x.name
+                WHEN 'FileHash' THEN x.hash
+                WHEN 'Url' THEN x.url
+                WHEN 'Process' THEN x.name
+                WHEN 'CloudResource' THEN x.resourceId
+                WHEN 'Email' THEN x.address
+                WHEN 'Cve' THEN x.cveId
+                ELSE toString(id(x))
+              END] AS nodeIds
+            """, fromLabel, fromIdProp, toLabel, toIdProp, pathFn, clampedHops);
+
+        Collection<Map<String, Object>> pathRows = neo4jClient
+                .query(pathQuery)
+                .bind(fromValue).to("fromValue")
+                .bind(toValue).to("toValue")
+                .bind(tl).to("tenantId")
+                .fetch()
+                .all();
+
+        List<List<String>> pathChoices = pathRows.stream()
+                .map(row -> (List<String>) row.get("nodeIds"))
+                .filter(Objects::nonNull)
+                .toList();
+
+        return new PathResponse(new ArrayList<>(nodeMap.values()), edges, true, pathCnt, minLen, pathChoices);
     }
 
     // ── Entity list ────────────────────────────────────────────────────────────

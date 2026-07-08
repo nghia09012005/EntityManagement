@@ -57,6 +57,12 @@ public class AuditLogRepositoryImpl implements AuditLogRepository {
         return (log != null && log.getEnrichment() != null) ? log.getEnrichment() : Collections.emptyMap();
     }
 
+        @Override
+        public AuditLog findByEventId(String eventId) {
+                if (eventId == null || eventId.isBlank()) return null;
+                return mongoTemplate.findById(eventId, AuditLog.class);
+        }
+
     @Override
     public List<AuditLog> findRecentEvents(LocalDateTime since) {
         Query query = new Query(Criteria.where("timestamp").gte(since))

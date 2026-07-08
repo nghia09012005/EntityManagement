@@ -12,13 +12,17 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 @RestController
 @RequestMapping("/api/incidents")
@@ -132,6 +136,59 @@ public class IncidentController {
             Authentication authentication) {
         return ResponseEntity.ok(auditLogRepository.findAlerts(PageRequest.of(page, size), tenantId(authentication)));
     }
+
+    @PostMapping("/from-path")
+    public ResponseEntity<Object> createFromPath(@RequestBody IncidentFromPathRequest request,
+                                                 Authentication authentication) {
+        if (request == null || request.path() == null || request.path().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Path is required"));
+        }
+        String tenantId = tenantId(authentication);
+        Incident incident = new Incident();
+        incident.setId(UUID.randomUUID().toString());
+        incident.setTenantId(tenantId);
+        incident.setPatternName("PathFinder-" + incident.getId());
+        incident.setTitle(request.title() != null && !request.title().isBlank()
+                ? request.title() : "Path Finder Incident");
+        incident.setSeverity(request.severity() != null && !request.severity().isBlank()
+                ? request.severity().toUpperCase() : "MEDIUM");
+        incident.setStatus("NEW");
+        LocalDateTime now = LocalDateTime.now();
+        incident.setDetectedAt(now);
+        incident.setUpdatedAt(now);
+        incident.setWindowStart(now.truncatedTo(ChronoUnit.HOURS));
+
+        Map<String, List<String>> affectedEntities = new LinkedHashMap<>();
+        for (String node : request.path()) {
+            int idx = node.indexOf(":");
+            if (idx <= 0) continue;
+            String label = node.substring(0, idx);
+            String value = node.substring(idx + 1);
+            affectedEntities.computeIfAbsent(label.toLowerCase(), key -> new ArrayList<>()).add(value);
+        }
+        incident.setAffectedEntities(affectedEntities);
+
+        incident.setRelatedEventIds(List.of());
+        incident.setTimeline(IntStream.range(0, request.path().size())
+                .mapToObj(i -> {
+                    String node = request.path().get(i);
+                    Map<String, String> entry = new LinkedHashMap<>();
+                    entry.put("time", now.plusSeconds(i).toString());
+                    entry.put("summary", "Path step: " + node);
+                    entry.put("eventId", "");
+                    return entry;
+                })
+                .toList());
+        incident.setRecommendedActions(List.of("Investigate the path and validate connected entities."));
+
+        incidentRepository.save(incident);
+        return ResponseEntity.ok(Map.of(
+                "id", incident.getId(),
+                "title", incident.getTitle(),
+                "status", incident.getStatus()));
+    }
+
+    public record IncidentFromPathRequest(String title, String severity, List<String> path) {}
 
     @SuppressWarnings("unchecked")
     private String tenantId(Authentication auth) {

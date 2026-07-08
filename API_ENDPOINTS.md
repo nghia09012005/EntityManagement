@@ -509,6 +509,178 @@ Authorization: Bearer <token>
 
 ---
 
+## 7. Field Mapping
+
+### GET `/api/field-mappings`
+
+Lấy danh sách mapping của tenant hiện tại.
+
+**Auth:** required
+
+**Response `200 OK`**
+
+```json
+[
+  {
+    "id": "6a4c8695e563be3469df2abd",
+    "tenantId": "3dc6c33d-59e2-440e-b71a-eb445b55925b",
+    "eventType": "AUTHENTICATION",
+    "sourceField": "buyya",
+    "entityType": "IP",
+    "relationshipType": "EXECUTED_ON",
+    "relatedEntityType": "IP",
+    "relatedEventField": "username",
+    "relationshipDirection": "TO_RELATED",
+    "enabled": true,
+    "createdAt": "2026-07-07T04:54:45.442+00:00",
+    "updatedAt": "2026-07-07T04:54:45.442+00:00"
+  }
+]
+```
+
+### GET `/api/field-mappings/options`
+
+Lấy option cho UI cấu hình mapping.
+
+**Auth:** required
+
+**Response `200 OK`**
+
+```json
+{
+  "eventTypes": ["AUTHENTICATION","PROCESS","NETWORK","THREAT"],
+  "entityTypes": ["User","Host","IP","Domain","FileHash","Url","Process","CloudResource","Email","Cve"],
+  "relationshipTypes": ["LOGGED_IN_TO","AUTHENTICATED_TO","EXECUTED_ON","HASH_OF","CONNECTED_TO","RESOLVES_TO","ALERTED_FROM","TARGETED_AT","DETECTED_ON","ACCESSED","HAS_EMAIL","AFFECTS","SAME_AS"],
+  "relationshipDirections": ["FROM_RELATED","TO_RELATED"],
+  "relatedEventFields": {
+    "AUTHENTICATION": ["username","ipAddress","workstation"],
+    "PROCESS": ["processName","processPath","fileHash","commandLine","hostname"],
+    "NETWORK": ["srcIp","dstIp","dstDomain"],
+    "THREAT": ["targetUser","targetIp","targetHost","targetDomain","targetFileHash","targetProcess","targetUrl","targetCloudResourceId","targetEmail","targetCve","sourceIp","sourceHost","sourceDomain"]
+  }
+}
+```
+
+### POST `/api/field-mappings`
+
+Tạo một FieldMapping mới.
+
+**Auth:** required
+
+**Request**
+
+```http
+POST /api/field-mappings
+Content-Type: application/json
+Authorization: Bearer <token>
+```
+
+```json
+{
+  "eventType": "AUTHENTICATION",
+  "sourceField": "buyya",
+  "entityType": "IP",
+  "relationshipType": "EXECUTED_ON",
+  "relatedEntityType": "IP",
+  "relatedEventField": "",
+  "relationshipDirection": "TO_RELATED",
+  "enabled": true
+}
+```
+
+**Notes**
+
+- `relatedEventField` có thể để trống nếu bạn muốn backend tự suy theo `relatedEntityType`.
+- Nếu `relatedEventField` có giá trị, backend sẽ ưu tiên sử dụng field đó.
+
+**Response `200 OK`**
+
+```json
+{
+  "id": "...",
+  "tenantId": "3dc6c33d-59e2-440e-b71a-eb445b55925b",
+  "eventType": "AUTHENTICATION",
+  "sourceField": "buyya",
+  "entityType": "IP",
+  "relationshipType": "EXECUTED_ON",
+  "relatedEntityType": "IP",
+  "relatedEventField": "",
+  "relationshipDirection": "TO_RELATED",
+  "enabled": true,
+  "createdAt": "2026-07-07T05:00:00.000+00:00",
+  "updatedAt": "2026-07-07T05:00:00.000+00:00"
+}
+```
+
+### PUT `/api/field-mappings/{id}`
+
+Cập nhật mapping hiện có.
+
+**Auth:** required
+
+Request body giống POST.
+
+---
+
+## 8. Custom Event Types
+
+### GET `/api/custom-event-types`
+
+Lấy danh sách custom event types của tenant.
+
+**Auth:** required
+
+### POST `/api/custom-event-types`
+
+Tạo custom event type mới.
+
+**Auth:** required
+
+**Request**
+
+```http
+POST /api/custom-event-types
+Content-Type: application/json
+Authorization: Bearer <token>
+```
+
+```json
+{
+  "eventType": "MFA_FAILURE",
+  "fields": [
+    {
+      "name": "username",
+      "valueType": "string",
+      "entityType": "User",
+      "relationshipType": "AUTHENTICATED_TO",
+      "relatedEntityType": "Host",
+      "relatedEventField": "workstation",
+      "relationshipDirection": "TO_RELATED"
+    }
+  ]
+}
+```
+
+**Notes**
+
+- `relatedEventField` cũng có thể để trống để backend tự suy giá trị đích theo `relatedEntityType`.
+- `relationshipType` chỉ hợp lệ khi `entityType` và `relatedEntityType` được xác định.
+
+**Response `200 OK`**
+
+```json
+{
+  "id": "...",
+  "tenantId": "...",
+  "eventType": "MFA_FAILURE",
+  "fields": [ ... ],
+  "createdAt": "...",
+  "updatedAt": "..."
+}
+```
+
+---
+
 ### GET `/api/dlq/summary`
 
 Đếm số DLQ event theo source topic.

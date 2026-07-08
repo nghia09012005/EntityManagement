@@ -4,6 +4,7 @@ import { Network } from 'vis-network'
 import { DataSet } from 'vis-data'
 import { NODE_COLORS } from './EntityBadge'
 import { getNeighbors } from '../api'
+import { normalizeGraphData } from '../utils/graphData'
 
 /* ──────── helpers ──────── */
 const LABEL_TO_TYPE = {
@@ -14,12 +15,9 @@ const ID_PROP = {
   User: 'username', Host: 'hostname', IP: 'address', Domain: 'name', FileHash: 'hash',
   Url: 'url', Process: 'name', CloudResource: 'resourceId', Email: 'address', Cve: 'cveId',
 }
-
-function nodeValue(n) {
-  const p = n._props
-  return p.username || p.hostname || p.url || p.resourceId || p.cveId ||
-         p.address || p.name ||
-         (p.hash ? p.hash.slice(0, 14) + '…' : String(n.id))
+const NODE_GROUP = {
+  User: 'User', IP: 'IP', Host: 'Device', CloudResource: 'Device', FileHash: 'File',
+  Url: 'URL', Domain: 'Domain', Process: 'Process', Email: 'Email', Cve: 'CVE',
 }
 
 function colorFor(label) {
@@ -91,13 +89,15 @@ export default function GraphView({ data }) {
   const edgesDS       = useRef(null)
   const expandedRef   = useRef(new Set())    // node IDs already expanded
 
-  const [layout,     setLayout]     = useState('force')
-  const [allRelTypes, setAllRelTypes] = useState([])
-  const [hiddenRels,  setHiddenRels]  = useState(new Set())
-  const [fromDate,   setFromDate]   = useState('')
-  const [toDate,     setToDate]     = useState('')
-  const [status,     setStatus]     = useState('')
-  const [selected,   setSelected]   = useState(null)   // { label, val, type }
+  const [layout,        setLayout]        = useState('force')
+  const [allRelTypes,   setAllRelTypes]   = useState([])
+  const [hiddenRels,    setHiddenRels]    = useState(new Set())
+  const [allNodeGroups, setAllNodeGroups] = useState([])
+  const [hiddenNodeGroups, setHiddenNodeGroups] = useState(new Set())
+  const [timeSteps,     setTimeSteps]     = useState([])
+  const [timeIndex,     setTimeIndex]     = useState(-1)
+  const [status,        setStatus]        = useState('')
+  const [selected,      setSelected]      = useState(null)   // { label, val, type }
 
   const navigate = useNavigate()
   const hasData  = (data?.nodes?.length ?? 0) > 0
@@ -106,15 +106,24 @@ export default function GraphView({ data }) {
   useEffect(() => {
     if (!containerRef.current || !data) return
 
-    nodesDS.current = new DataSet(data.nodes.map(toVisNode))
-    edgesDS.current = new DataSet(data.edges.map(toVisEdge))
+    const normalized = normalizeGraphData(data)
+    nodesDS.current = new DataSet(normalized.nodes.map(toVisNode))
+    edgesDS.current = new DataSet(normalized.edges.map(toVisEdge))
     expandedRef.current.clear()
 
-    const types = [...new Set(data.edges.map(e => e.type))]
+    const types = [...new Set(normalized.edges.map(e => e.type))]
+    const groups = [...new Set(normalized.nodes.map(n => NODE_GROUP[n.label] || n.label))]
+    const steps = [...new Set(normalized.edges
+      .map(e => e.properties?.firstSeen || e._firstSeen || '')
+      .map(ts => ts && ts.slice(0, 10))
+      .filter(Boolean))].sort()
+
     setAllRelTypes(types)
     setHiddenRels(new Set())
-    setFromDate('')
-    setToDate('')
+    setAllNodeGroups(groups)
+    setHiddenNodeGroups(new Set())
+    setTimeSteps(steps)
+    setTimeIndex(steps.length > 0 ? steps.length - 1 : -1)
     setSelected(null)
     setStatus('Double-click node to expand  ·  Right-click node to open detail')
 
@@ -188,14 +197,34 @@ export default function GraphView({ data }) {
 
   /* ── re-apply filters when they change ── */
   useEffect(() => {
-    if (!edgesDS.current) return
+    if (!edgesDS.current || !nodesDS.current) return
+
+    const visibleNodes = new Set()
+    nodesDS.current.get().forEach(node => {
+      const group = NODE_GROUP[node._label] || node._label
+      const hidden = hiddenNodeGroups.has(group)
+      nodesDS.current.update({ id: node.id, hidden })
+      if (!hidden) visibleNodes.add(node.id)
+    })
+
     edgesDS.current.get().forEach(edge => {
       let hidden = hiddenRels.has(edge._type)
-      if (!hidden && fromDate && edge._firstSeen && edge._firstSeen.slice(0, 10) < fromDate) hidden = true
-      if (!hidden && toDate   && edge._firstSeen && edge._firstSeen.slice(0, 10) > toDate)   hidden = true
+      if (!hidden && timeIndex >= 0 && edge._firstSeen) {
+        const selectedDate = timeSteps[timeIndex]
+        hidden = edge._firstSeen.slice(0, 10) > selectedDate
+      }
+      if (!hidden && (!visibleNodes.has(edge.from) || !visibleNodes.has(edge.to))) hidden = true
       edgesDS.current.update({ id: edge.id, hidden })
     })
-  }, [hiddenRels, fromDate, toDate])
+
+    nodesDS.current.get().forEach(node => {
+      if (node.hidden) return
+      const connected = edgesDS.current.get({ filter: edge => !edge.hidden && (edge.from === node.id || edge.to === node.id) })
+      if (connected.length === 0) {
+        nodesDS.current.update({ id: node.id, hidden: true })
+      }
+    })
+  }, [hiddenRels, hiddenNodeGroups, timeIndex, timeSteps])
 
   /* ── layout switch ── */
   const switchLayout = (l) => {
@@ -214,7 +243,18 @@ export default function GraphView({ data }) {
     })
   }
 
-  /* ── export ── */
+  const toggleNodeGroup = (group) => {
+    setHiddenNodeGroups(prev => {
+      const next = new Set(prev)
+      next.has(group) ? next.delete(group) : next.add(group)
+      return next
+    })
+  }
+
+  const clearTimeFilter = () => {
+    setTimeIndex(timeSteps.length > 0 ? timeSteps.length - 1 : -1)
+  }
+
   const exportPng = () => {
     const canvas = containerRef.current?.querySelector('canvas')
     if (!canvas) return
@@ -249,6 +289,19 @@ export default function GraphView({ data }) {
                   onClick={() => switchLayout('hierarchical')}>Hierarchical</button>
         </div>
 
+        {/* Node group filter */}
+        {allNodeGroups.length > 0 && (
+          <div className="gv-group gv-node-filters">
+            <span className="gv-label">Nodes</span>
+            {allNodeGroups.map(g => (
+              <label key={g} className={`gv-chip ${hiddenNodeGroups.has(g) ? 'off' : ''}`}>
+                <input type="checkbox" checked={!hiddenNodeGroups.has(g)} onChange={() => toggleNodeGroup(g)} />
+                {g}
+              </label>
+            ))}
+          </div>
+        )}
+
         {/* Relationship filter */}
         {allRelTypes.length > 0 && (
           <div className="gv-group gv-rels">
@@ -262,16 +315,23 @@ export default function GraphView({ data }) {
           </div>
         )}
 
-        {/* Time filter */}
-        <div className="gv-group">
-          <span className="gv-label">First seen</span>
-          <input className="gv-date" type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} />
-          <span style={{ color: '#4a5568' }}>–</span>
-          <input className="gv-date" type="date" value={toDate}   onChange={e => setToDate(e.target.value)} />
-          {(fromDate || toDate) && (
-            <button className="gv-btn" onClick={() => { setFromDate(''); setToDate('') }}>×</button>
-          )}
-        </div>
+        {/* Time slider */}
+        {timeSteps.length > 0 && (
+          <div className="gv-group gv-time-slider">
+            <span className="gv-label">Time</span>
+            <input
+              className="gv-slider"
+              type="range"
+              min={0}
+              max={timeSteps.length - 1}
+              step={1}
+              value={timeIndex}
+              onChange={(e) => setTimeIndex(Number(e.target.value))}
+            />
+            <span className="gv-time-label">{timeSteps[timeIndex] || 'All'}</span>
+            <button className="gv-btn" onClick={clearTimeFilter}>All</button>
+          </div>
+        )}
 
         {/* Right-side actions */}
         <div className="gv-group" style={{ marginLeft: 'auto', gap: 6 }}>

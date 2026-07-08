@@ -13,7 +13,7 @@ public class MockLlmClient implements LlmClient {
         // Trả về OCSF Security Finding mẫu để test khi chưa có Gemini key
         return """
                 {
-                  "eventType": "ALERT",
+                  "eventType": "THREAT",
                   "class_uid": 2001,
                   "category_uid": 2,
                   "activity_id": 1,

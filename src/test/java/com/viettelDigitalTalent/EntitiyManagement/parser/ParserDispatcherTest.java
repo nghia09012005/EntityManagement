@@ -8,6 +8,7 @@ import com.viettelDigitalTalent.EntitiyManagement.normalize.event.NetworkEvent;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.event.ProcessEvent;
 import com.viettelDigitalTalent.EntitiyManagement.parser.alert.AlertEventParser;
 import com.viettelDigitalTalent.EntitiyManagement.parser.core.ParserDispatcher;
+import com.viettelDigitalTalent.EntitiyManagement.parser.custom.CustomEventParser;
 import com.viettelDigitalTalent.EntitiyManagement.parser.network.NetworkEventParser;
 import com.viettelDigitalTalent.EntitiyManagement.parser.process.ProcessEventParser;
 import com.viettelDigitalTalent.EntitiyManagement.parser.windows.WindowsEventParser;
@@ -36,6 +37,7 @@ class ParserDispatcherTest {
     @Mock private ProcessEventParser processParser;
     @Mock private AlertEventParser alertParser;
     @Mock private NetworkEventParser networkParser;
+    @Mock private CustomEventParser customParser;
     @Mock private LlmProcess llmProcess;
 
     @BeforeEach
@@ -44,6 +46,7 @@ class ParserDispatcherTest {
         ReflectionTestUtils.setField(dispatcher, "processParser", processParser);
         ReflectionTestUtils.setField(dispatcher, "alertParser", alertParser);
         ReflectionTestUtils.setField(dispatcher, "networkParser", networkParser);
+        ReflectionTestUtils.setField(dispatcher, "customParser", customParser);
         ReflectionTestUtils.setField(dispatcher, "llmProcess", llmProcess);
     }
 
@@ -183,10 +186,23 @@ class ParserDispatcherTest {
     }
 
     @Test
-    void autoDetectUnknownJsonFormatThrowsException() {
-        assertThatThrownBy(() -> dispatcher.autoDetect("{\"foo\":\"bar\",\"baz\":123}"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Unknown log format");
+    void autoDetectUnknownJsonFormatFallsBackToCustomParserThenLlm() {
+        when(customParser.parse(anyString())).thenReturn(new AlertEvent());
+
+        BaseEvent event = dispatcher.autoDetect("{\"foo\":\"bar\",\"baz\":123}");
+
+        assertThat(event).isInstanceOf(AlertEvent.class);
+        verify(customParser).parse("{\"foo\":\"bar\",\"baz\":123}");
+    }
+
+    @Test
+    void autoDetectCustomEventTypeRoutesToCustomParser() {
+        when(customParser.parse(anyString())).thenReturn(new AlertEvent());
+
+        BaseEvent event = dispatcher.autoDetect("{\"eventType\":\"CUSTOM\",\"abc\":\"alice\"}");
+
+        assertThat(event).isInstanceOf(AlertEvent.class);
+        verify(customParser).parse("{\"eventType\":\"CUSTOM\",\"abc\":\"alice\"}");
     }
 
     @Test

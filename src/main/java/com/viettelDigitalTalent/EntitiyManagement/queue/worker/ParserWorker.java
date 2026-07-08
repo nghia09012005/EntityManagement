@@ -11,6 +11,9 @@ import com.viettelDigitalTalent.EntitiyManagement.normalize.event.Authentication
 import com.viettelDigitalTalent.EntitiyManagement.normalize.event.NetworkEvent;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.event.ProcessEvent;
 import com.viettelDigitalTalent.EntitiyManagement.parser.core.ParserDispatcher;
+import com.viettelDigitalTalent.EntitiyManagement.parser.core.UnknownFieldDetector;
+import com.viettelDigitalTalent.EntitiyManagement.storage.repository.UnknownFieldStatRepository;
+import com.viettelDigitalTalent.EntitiyManagement.storage.repository.UnknownFieldOccurrenceRepository;
 import com.viettelDigitalTalent.EntitiyManagement.queue.config.KafkaTopicConstants;
 import com.viettelDigitalTalent.EntitiyManagement.queue.publisher.DeadLetterPublisher;
 import com.viettelDigitalTalent.EntitiyManagement.storage.repository.AuditLogRepository;
@@ -42,6 +45,9 @@ public class ParserWorker {
     @Autowired private MeterRegistry meterRegistry;
     @Autowired private KafkaTemplate<String, String> kafkaTemplate;
     @Autowired private DeadLetterPublisher deadLetterPublisher;
+    @Autowired private UnknownFieldDetector unknownFieldDetector;
+    @Autowired private UnknownFieldStatRepository unknownFieldStatRepository;
+    @Autowired private UnknownFieldOccurrenceRepository unknownFieldOccurrenceRepository;
 
     private Counter eventsProcessedCounter() {
         return Counter.builder("soc.events.processed")
@@ -78,7 +84,10 @@ public class ParserWorker {
             if (event.getEventId() == null) {
                 event.setEventId(UUID.randomUUID().toString());
             }
+
             event.setTenantId(finalTenantId);
+            hydrateRawData(event);
+            captureUnknownFields(rawPayload, event);
 
             log.info("Parsed event: {} [ID: {}] tenantId={}", event.getClass().getSimpleName(), event.getEventId(), finalTenantId);
             eventsProcessedCounter().increment();
@@ -88,13 +97,7 @@ public class ParserWorker {
             String eventCategory = event.getCategory();
             LocalDateTime timestamp = event.getTimestamp() != null ? event.getTimestamp() : LocalDateTime.now();
 
-            Map<String, Object> rawDataSnapshot;
-            try {
-                rawDataSnapshot = objectMapper.readValue(rawPayload, new TypeReference<>() {});
-            } catch (Exception ex) {
-                rawDataSnapshot = new HashMap<>();
-                rawDataSnapshot.put("_raw", rawPayload);
-            }
+            Map<String, Object> rawDataSnapshot = new HashMap<>(event.getRawData());
 
             // Sync: lưu raw log ngay trên Kafka consumer thread — đảm bảo document
             // tồn tại trước khi EnrichmentWorker chạy updateEnrichment.
@@ -105,10 +108,12 @@ public class ParserWorker {
                 log.error("[ParserWorker] Lỗi khi lưu raw log cho ID: {}", eventId, e);
             }
 
-            boolean isFreeText = !rawPayload.trim().startsWith("{") && !rawPayload.trim().startsWith("[");
+            boolean isLlmFallback = event instanceof AlertEvent alert
+                    && ("free-text".equals(alert.getSource()) || "llm-fallback".equals(alert.getSource()));
 
-            if (isFreeText && event instanceof AlertEvent alertEvent) {
-                // Free-text: chạy LLM async rồi mới publish normalized-events
+            if (isLlmFallback && event instanceof AlertEvent alertEvent) {
+                // Free-text/unknown JSON: chạy LLM async rồi mới publish normalized-events.
+                // Nếu LLM không hiểu được, exception sẽ đẩy payload xuống DLQ.
                 CompletableFuture.runAsync(() -> {
                     try {
                         AlertEvent llmResult = llmProcess.extractAlert(rawPayload);
@@ -129,6 +134,10 @@ public class ParserWorker {
                             alertEvent.setTargetCloudResourceId(llmResult.getTargetCloudResourceId());
                             alertEvent.setTargetEmail(llmResult.getTargetEmail());
                             alertEvent.setTargetCve(llmResult.getTargetCve());
+                            if (llmResult.getSourceIp() != null) alertEvent.setSourceIp(llmResult.getSourceIp());
+                            if (llmResult.getSourceHost() != null) alertEvent.setSourceHost(llmResult.getSourceHost());
+                            if (llmResult.getSourceDomain() != null) alertEvent.setSourceDomain(llmResult.getSourceDomain());
+                            hydrateRawData(alertEvent);
                         }
                         publishNormalized(alertEvent, rawPayload, finalTenantId);
                     } catch (Exception e) {
@@ -183,6 +192,80 @@ public class ParserWorker {
             log.warn("Auto detect");
             return parserDispatcher.autoDetect(rawJson);
         }
+    }
+
+    private void hydrateRawData(BaseEvent event) {
+        if (event instanceof AuthenticationEvent auth) {
+            if (auth.getUsername() != null) auth.getRawData().put("username", auth.getUsername());
+            if (auth.getIpAddress() != null) auth.getRawData().put("ipAddress", auth.getIpAddress());
+            if (auth.getWorkstation() != null) auth.getRawData().put("workstation", auth.getWorkstation());
+            auth.getRawData().put("success", auth.isSuccess());
+            return;
+        }
+
+        if (event instanceof ProcessEvent proc) {
+            if (proc.getProcessName() != null) proc.getRawData().put("processName", proc.getProcessName());
+            if (proc.getProcessPath() != null) proc.getRawData().put("processPath", proc.getProcessPath());
+            if (proc.getFileHash() != null) proc.getRawData().put("fileHash", proc.getFileHash());
+            if (proc.getCommandLine() != null) proc.getRawData().put("commandLine", proc.getCommandLine());
+            if (proc.getRawData().get("hostname") == null && proc.getRawData().get("raw_data") instanceof Map<?, ?> rawData) {
+                Object hostname = rawData.get("hostname");
+                if (hostname != null) proc.getRawData().put("hostname", hostname);
+            }
+            return;
+        }
+
+        if (event instanceof NetworkEvent net) {
+            if (net.getSrcIp() != null) net.getRawData().put("srcIp", net.getSrcIp());
+            if (net.getDstIp() != null) net.getRawData().put("dstIp", net.getDstIp());
+            if (net.getDstDomain() != null) net.getRawData().put("dstDomain", net.getDstDomain());
+            if (net.getDstPort() > 0) net.getRawData().put("dstPort", net.getDstPort());
+            return;
+        }
+
+        if (event instanceof AlertEvent alert) {
+            if (alert.getAlertName() != null) alert.getRawData().put("alertName", alert.getAlertName());
+            if (alert.getSeverity() != null) alert.getRawData().put("severity", alert.getSeverity());
+            if (alert.getDescription() != null) alert.getRawData().put("description", alert.getDescription());
+            if (alert.getTargetIp() != null) alert.getRawData().put("targetIp", alert.getTargetIp());
+            if (alert.getTargetUser() != null) alert.getRawData().put("targetUser", alert.getTargetUser());
+            if (alert.getTargetHost() != null) alert.getRawData().put("targetHost", alert.getTargetHost());
+            if (alert.getTargetDomain() != null) alert.getRawData().put("targetDomain", alert.getTargetDomain());
+            if (alert.getTargetFileHash() != null) alert.getRawData().put("targetFileHash", alert.getTargetFileHash());
+            if (alert.getTargetProcess() != null) alert.getRawData().put("targetProcess", alert.getTargetProcess());
+            if (alert.getTargetUrl() != null) alert.getRawData().put("targetUrl", alert.getTargetUrl());
+            if (alert.getTargetCloudResourceId() != null) alert.getRawData().put("targetCloudResourceId", alert.getTargetCloudResourceId());
+            if (alert.getTargetEmail() != null) alert.getRawData().put("targetEmail", alert.getTargetEmail());
+            if (alert.getTargetCve() != null) alert.getRawData().put("targetCve", alert.getTargetCve());
+        }
+    }
+
+    private void captureUnknownFields(String rawPayload, BaseEvent event) {
+        if (rawPayload == null || !rawPayload.trim().startsWith("{")) return;
+        if (event instanceof AlertEvent alert
+                && ("custom-parser".equals(alert.getSource()) || "llm-fallback".equals(alert.getSource()))) {
+            return;
+        }
+
+        Map<String, Object> unknown = unknownFieldDetector.detect(rawPayload, event.getCategory(), event.getTenantId());
+        Map<String, Object> customFieldValues = unknownFieldDetector.collectCustomFieldValues(rawPayload, event.getCategory(), event.getTenantId());
+        if (!customFieldValues.isEmpty()) {
+            customFieldValues.forEach((fieldName, value) -> event.getRawData().putIfAbsent(fieldName, value));
+        }
+        if (unknown.isEmpty()) return;
+
+        event.setUnknownFields(new HashMap<>(unknown));
+        unknownFieldStatRepository.record(event.getCategory(), event.getEventId(), unknown);
+        unknown.forEach((fieldName, value) -> unknownFieldOccurrenceRepository.record(
+            event.getTenantId(),
+            event.getCategory(),
+            event.getEventId(),
+            fieldName,
+            value != null ? String.valueOf(value) : null,
+            event.getTimestamp() != null ? event.getTimestamp() : LocalDateTime.now()
+        ));
+        log.info("[ParserWorker] Phát hiện {} trường lạ cho {}: {}",
+                unknown.size(), event.getCategory(), unknown.keySet());
     }
 
     /** True khi Jackson tạo được event nhưng không populate field nào có ý nghĩa. */

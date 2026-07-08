@@ -27,6 +27,11 @@ public class LlmOutputValidator {
         if (llmOutput == null || llmOutput.isBlank()) return null;
 
         try {
+
+            log.warn("[LlmValidator] output llm: {}",llmOutput);
+
+
+
             // Strip markdown code blocks nếu model trả về ```json ... ```
             String json = llmOutput.trim();
             if (json.startsWith("```")) {
@@ -34,6 +39,13 @@ public class LlmOutputValidator {
             }
 
             JsonNode node = objectMapper.readTree(json);
+
+            String message = node.path("message").asText();
+            if ("Unknown log line".equals(message)) {
+                log.warn("[LlmValidator] output báo hiệu log không xác định, bỏ qua.");
+                return null;
+            }
+
 
             String alertName = firstText(node, "finding.title", "alertName");
             if (alertName == null || alertName.isBlank()) {
@@ -54,6 +66,11 @@ public class LlmOutputValidator {
             event.setSeverity(severity.toUpperCase());
             event.setDescription(firstText(node, "finding.desc", "description", "message"));
             event.setTargetIp(firstText(node, "dst_endpoint.ip", "targetIp"));
+            //srcIP
+            event.setSourceIp(firstText(node, "src_endpoint.ip", "sourceIp"));
+            event.setSourceHost(firstText(node, "src_endpoint.hostname", "sourceHost"));
+            event.setSourceDomain(firstText(node, "src_endpoint.domain", "sourceDomain"));
+            //---------
             event.setTargetUser(firstText(node, "actor.user.name", "targetUser"));
             event.setTargetHost(firstText(node, "dst_endpoint.hostname", "targetHost"));
             event.setTargetDomain(firstText(node, "dst_endpoint.domain", "targetDomain"));

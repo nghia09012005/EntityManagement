@@ -22,19 +22,36 @@ public class LlmProcess {
     @Autowired private LlmPromptEngine promptEngine;
     @Autowired private LlmOutputValidator outputValidator;
 
+    @Autowired private LogSanitizer logSanitizer;
+
     /**
      * Thử lần lượt: Gemini → Groq → Mock
      * Mỗi client trả null khi thất bại → chuyển sang client tiếp theo.
      */
     public AlertEvent extractAlert(String freeText) {
-        String prompt = promptEngine.build(freeText);
+
+        LogSanitizer.SanitizedLog sanitizedLog = logSanitizer.sanitizeWithMapping(freeText);
+        String sanitizerLog = sanitizedLog.getSanitizedLog();
+        log.info("[sanitizerLog ]: {}", sanitizerLog);
+
+        String prompt = promptEngine.build(sanitizerLog);
 
         for (LlmClient client : buildChain()) {
             log.info("[LLM] Thử {} ({} chars)", client.modelName(), freeText.length());
             try {
                 String output = client.call(prompt);
+
                 AlertEvent event = outputValidator.validate(output);
+
+                log.warn(sanitizedLog.getReplacements().toString());
+
                 if (event != null) {
+                    logSanitizer.restoreMaskedValues(event, sanitizedLog.getReplacements());
+
+                    log.info("[LLMProcess]: {}",event.getSourceIp());
+                    log.info("[LLMProcess]: {}",event.getTargetIp());
+
+
                     log.info("[LLM] {} → thành công: alertName={} severity={}",
                             client.modelName(), event.getAlertName(), event.getSeverity());
                     return event;
@@ -46,14 +63,15 @@ public class LlmProcess {
         }
 
         log.warn("[LLM] Tất cả client đều thất bại.");
-        return null;
+        throw  new IllegalArgumentException(freeText);
+//        return null;
     }
 
     private List<LlmClient> buildChain() {
         List<LlmClient> chain = new ArrayList<>();
         if (geminiClient != null) chain.add(geminiClient);
         if (groqClient   != null) chain.add(groqClient);
-        chain.add(mockClient);
+//        chain.add(mockClient);
         return chain;
     }
 }

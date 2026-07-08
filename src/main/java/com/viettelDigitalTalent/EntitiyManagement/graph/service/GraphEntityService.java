@@ -23,6 +23,7 @@ public class GraphEntityService {
     private final Neo4jClient neo4jClient;
     private final DedupSignal dedupSignal;
     private final MeterRegistry meterRegistry;
+    private final CustomFieldGraphService customFieldGraphService;
     private final Counter authCounter;
     private final Counter processCounter;
     private final Counter networkCounter;
@@ -33,10 +34,11 @@ public class GraphEntityService {
     private final Timer alertTimer;
 
     public GraphEntityService(Neo4jClient neo4jClient, MeterRegistry meterRegistry,
-                              DedupSignal dedupSignal) {
+                              DedupSignal dedupSignal, CustomFieldGraphService customFieldGraphService) {
         this.neo4jClient   = neo4jClient;
         this.dedupSignal   = dedupSignal;
         this.meterRegistry = meterRegistry;
+        this.customFieldGraphService = customFieldGraphService;
         this.authCounter    = Counter.builder("soc.entity.saved").tag("event_type", "AUTHENTICATION").register(meterRegistry);
         this.processCounter = Counter.builder("soc.entity.saved").tag("event_type", "PROCESS").register(meterRegistry);
         this.networkCounter = Counter.builder("soc.entity.saved").tag("event_type", "NETWORK").register(meterRegistry);
@@ -70,6 +72,7 @@ public class GraphEntityService {
             else if (event instanceof NetworkEvent net)    { saveNetwork(net, now, eid, tl);  networkCounter.increment(); dedupSignal.mark(); neo4jTimer = networkTimer; }
             else if (event instanceof AlertEvent alert)    { saveAlert(alert, now, eid, tl);  alertCounter.increment();   dedupSignal.mark(); neo4jTimer = alertTimer; }
             else { neo4jTimer = authTimer; }
+            customFieldGraphService.applyMappings(event);
             neo4jSample.stop(neo4jTimer);
         } catch (Exception e) {
             log.error("[Graph] Lỗi khi lưu entity cho event {}: {}", event.getEventId(), e.getMessage(), e);

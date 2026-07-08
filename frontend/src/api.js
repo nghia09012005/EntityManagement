@@ -52,6 +52,108 @@ export const ingestLog = (rawText) =>
     return r.text()
   })
 
+export const fetchUnknownFieldStats = (top = 5, range = '24h', fieldName = '') =>
+  fetch(`${BASE_URL}/api/unknown-fields/stats?top=${top}&range=${encodeURIComponent(range)}${fieldName ? `&fieldName=${encodeURIComponent(fieldName)}` : ''}`, { headers: authHeaders() }).then(async r => {
+    const data = await r.json()
+    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`)
+    return data
+  })
+
+export const fetchLogStats = (range = '24h') =>
+  fetch(`${BASE_URL}/api/logs/stats?range=${encodeURIComponent(range)}`, { headers: authHeaders() }).then(async r => {
+    const data = await r.json()
+    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`)
+    return data
+  })
+
+export const fetchUnknownFieldAnalytics = (range = '24h') =>
+  fetch(`${BASE_URL}/api/unknown-fields/analytics?range=${encodeURIComponent(range)}`, { headers: authHeaders() }).then(async r => {
+    const data = await r.json()
+    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`)
+    return data
+  })
+
+export const fetchUnknownFieldEvents = (page = 0, size = 10, range = '24h', fieldName = '') =>
+  fetch(`${BASE_URL}/api/unknown-fields/events?page=${page}&size=${size}&range=${encodeURIComponent(range)}${fieldName ? `&fieldName=${encodeURIComponent(fieldName)}` : ''}`, { headers: authHeaders() }).then(async r => {
+    const data = await r.json()
+    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`)
+    return data
+  })
+
+export const fetchLogByEventId = (eventId) =>
+  fetch(`${BASE_URL}/api/logs/${encodeURIComponent(eventId)}`, { headers: authHeaders() }).then(async r => {
+    if (!r.ok) {
+      const data = await r.json().catch(() => ({}))
+      throw new Error(data.error || `HTTP ${r.status}`)
+    }
+    return r.json()
+  })
+
+export const fetchFieldMappingOptions = () =>
+  fetch(`${BASE_URL}/api/field-mappings/options`, { headers: authHeaders() }).then(async r => {
+    const data = await r.json()
+    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`)
+    return data
+  })
+
+export const fetchFieldMappings = () =>
+  fetch(`${BASE_URL}/api/field-mappings`, { headers: authHeaders() }).then(async r => {
+    const data = await r.json()
+    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`)
+    return data
+  })
+
+export const fetchCustomEventTypes = () =>
+  fetch(`${BASE_URL}/api/custom-event-types`, { headers: authHeaders() }).then(async r => {
+    const data = await r.json()
+    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`)
+    return data
+  })
+
+export const createCustomEventType = (payload) =>
+  fetch(`${BASE_URL}/api/custom-event-types`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  }).then(async r => {
+    const data = await r.json()
+    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`)
+    return data
+  })
+
+export const createFieldMapping = (payload) =>
+  fetch(`${BASE_URL}/api/field-mappings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  }).then(async r => {
+    const data = await r.json()
+    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`)
+    return data
+  })
+
+export const updateFieldMapping = (id, payload) =>
+  fetch(`${BASE_URL}/api/field-mappings/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  }).then(async r => {
+    const data = await r.json()
+    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`)
+    return data
+  })
+
+export const deleteFieldMapping = (id) =>
+  fetch(`${BASE_URL}/api/field-mappings/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  }).then(async r => {
+    if (!r.ok) {
+      const data = await r.json().catch(() => ({}))
+      throw new Error(data.error || `HTTP ${r.status}`)
+    }
+  })
+
 export const uploadLogFile = (file) => {
   const form = new FormData()
   form.append('file', file)
@@ -75,6 +177,17 @@ export const getNeighbors = (label, value, hops = 1) =>
 export const findPath = (fromType, fromValue, toType, toValue, maxHops = 6, mode = 'shortest') =>
   fetch(`${BASE_URL}/api/graph/path?fromType=${fromType}&fromValue=${encodeURIComponent(fromValue)}&toType=${toType}&toValue=${encodeURIComponent(toValue)}&maxHops=${maxHops}&mode=${mode}`,
     { headers: authHeaders() }).then(r => r.json())
+
+export const createIncidentFromPath = (payload) =>
+  fetch(`${BASE_URL}/api/incidents/from-path`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  }).then(async r => {
+    const data = await r.json()
+    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`)
+    return data
+  })
 
 export const fetchDlqEvents = (page = 0, size = 20) =>
   fetch(`${BASE_URL}/api/dlq/events?page=${page}&size=${size}`, { headers: authHeaders() }).then(r => r.json())

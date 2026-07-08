@@ -10,7 +10,7 @@ public class LlmPromptEngine {
             Return ONLY one OCSF-like JSON object for Security Finding with these exact fields.
             Use null for missing optional nested values. Use 0 for time if the log line has no timestamp.
             {
-               "eventType": "ALERT",
+               "eventType": "THREAT",
                "class_uid": 2001,
                "category_uid": 2,
                "activity_id": 1,
@@ -32,11 +32,17 @@ public class LlmPromptEngine {
                    "name": "<username, null if none>"
                  }
                },
+               
+               "src_endpoint": {
+                 "ip": "<IPv4/IPv6, null if none>",
+                 "hostname": "<Targethostname, null if none>",
+                 "domain": "<Targetdomain, null if none>"
+               },
             
                "dst_endpoint": {
                  "ip": "<IPv4/IPv6, null if none>",
-                 "hostname": "<hostname, null if none>",
-                 "domain": "<domain name, null if none>"
+                 "hostname": "<Targethostname, null if none>",
+                 "domain": "<Targetdomain name, null if none>"
                },
             
                "process": {
@@ -60,7 +66,7 @@ public class LlmPromptEngine {
                "source": "<log source or tool name, null if unknown>"
              }
             If there is no file hash, return "hashes": [].
-            Return ONLY the JSON, no markdown, no explanation.
+            Return ONLY the JSON, no markdown, no explanation, if the free-text is not match any pattenr return "UNKNOW" "
             """;
 
     public String build(String freeTextLog) {

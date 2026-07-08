@@ -31,8 +31,12 @@ class GraphEntityServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new GraphEntityService(neo4jClient, new SimpleMeterRegistry(),
-                new com.viettelDigitalTalent.EntitiyManagement.graph.service.DedupSignal());
+        service = new GraphEntityService(
+                neo4jClient,
+                new SimpleMeterRegistry(),
+                new com.viettelDigitalTalent.EntitiyManagement.graph.service.DedupSignal(),
+                mock(com.viettelDigitalTalent.EntitiyManagement.graph.service.CustomFieldGraphService.class)
+        );
     }
 
     // ── AuthenticationEvent ──────────────────────────────────────────────────

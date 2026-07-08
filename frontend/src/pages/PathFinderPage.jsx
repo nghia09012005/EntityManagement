@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { findPath, ENTITY_TYPES, ENTITY_LABELS } from '../api'
+import { useState, useEffect } from 'react'
+import { findPath, createIncidentFromPath, ENTITY_TYPES, ENTITY_LABELS } from '../api'
 import GraphView from '../components/GraphView'
 
 const PLACEHOLDER = {
@@ -41,6 +41,18 @@ export default function PathFinderPage() {
   const [result,  setResult]  = useState(null)   // PathResponse
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
+  const [selectedPathIndex, setSelectedPathIndex] = useState(0)
+  const [incidentTitle, setIncidentTitle] = useState('')
+  const [incidentSeverity, setIncidentSeverity] = useState('MEDIUM')
+  const [creatingIncident, setCreatingIncident] = useState(false)
+  const [createResult, setCreateResult] = useState(null)
+  const [createError, setCreateError] = useState('')
+
+  useEffect(() => {
+    if (result?.paths?.length) {
+      setSelectedPathIndex(0)
+    }
+  }, [result])
 
   const run = async () => {
     if (!fromValue.trim() || !toValue.trim()) {
@@ -57,6 +69,30 @@ export default function PathFinderPage() {
       setError(`Lỗi: ${e.message}`)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const createIncident = async () => {
+    if (!result?.paths?.length) return
+    const path = result.paths[selectedPathIndex]
+    if (!path || path.length === 0) {
+      setCreateError('Chưa chọn đường đi hợp lệ.')
+      return
+    }
+    setCreatingIncident(true)
+    setCreateError('')
+    setCreateResult(null)
+    try {
+      const response = await createIncidentFromPath({
+        title: incidentTitle || `Incident from path ${selectedPathIndex + 1}`,
+        severity: incidentSeverity,
+        path,
+      })
+      setCreateResult(response)
+    } catch (e) {
+      setCreateError(e.message)
+    } finally {
+      setCreatingIncident(false)
     }
   }
 
@@ -117,6 +153,73 @@ export default function PathFinderPage() {
                 {result.nodes.length} nodes · {result.edges.length} edges
               </span>
             </div>
+
+            {result.paths?.length > 0 && (
+              <div style={{ padding: '16px', borderBottom: '1px solid #1e2432', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0' }}>Chọn đường để tạo incident</div>
+                    <div style={{ marginTop: 4, color: '#a0aec0', fontSize: 12 }}>
+                      {result.paths.length} đường tìm được. Chọn một đường và nhấn tạo incident.
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {result.paths.map((path, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className={`gv-btn ${idx === selectedPathIndex ? 'active' : ''}`}
+                        onClick={() => { setSelectedPathIndex(idx); setCreateResult(null); setCreateError('') }}
+                      >
+                        Path {idx + 1} ({path.length - 1} hops)
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                    <input
+                      className="pf-input"
+                      style={{ flex: '1 1 320px' }}
+                      value={incidentTitle}
+                      onChange={e => setIncidentTitle(e.target.value)}
+                      placeholder="Tiêu đề incident (mặc định sẽ tạo tự động)"
+                    />
+                    <select
+                      className="pf-select"
+                      value={incidentSeverity}
+                      onChange={e => setIncidentSeverity(e.target.value)}
+                    >
+                      {['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map(level => (
+                        <option key={level} value={level}>{level}</option>
+                      ))}
+                    </select>
+                    <button className="gv-btn" onClick={createIncident} disabled={creatingIncident}>
+                      {creatingIncident ? 'Đang tạo…' : 'Tạo Incident từ đường'
+                      }
+                    </button>
+                  </div>
+
+                  {createResult && (
+                    <div className="incident-list-card" style={{ padding: 14, background: '#0f1624', border: '1px solid #2d3748' }}>
+                      <div style={{ color: '#63b3ed', fontWeight: 700 }}>Incident đã tạo</div>
+                      <div style={{ marginTop: 6, color: '#a0aec0' }}>ID: {createResult.id}</div>
+                      <div style={{ color: '#a0aec0' }}>Title: {createResult.title}</div>
+                      <div style={{ color: '#a0aec0' }}>Status: {createResult.status}</div>
+                    </div>
+                  )}
+                  {createError && (
+                    <div className="empty" style={{ color: '#fc8181', padding: '10px 0' }}>{createError}</div>
+                  )}
+                </div>
+
+                <div style={{ marginTop: 12, color: '#a0aec0', fontSize: 13 }}>
+                  <strong>Đường đã chọn:</strong> {result.paths[selectedPathIndex]?.join(' → ')}
+                </div>
+              </div>
+            )}
+
             <GraphView data={result} />
           </div>
         ) : (

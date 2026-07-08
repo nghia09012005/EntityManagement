@@ -9,6 +9,7 @@ import com.viettelDigitalTalent.EntitiyManagement.parser.alert.AlertEventParser;
 import com.viettelDigitalTalent.EntitiyManagement.parser.network.NetworkEventParser;
 import com.viettelDigitalTalent.EntitiyManagement.parser.process.ProcessEventParser;
 import com.viettelDigitalTalent.EntitiyManagement.parser.windows.WindowsEventParser;
+import com.viettelDigitalTalent.EntitiyManagement.parser.custom.CustomEventParser;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ public class ParserDispatcher {
     @Autowired private ProcessEventParser processParser;
     @Autowired private AlertEventParser alertParser;
     @Autowired private NetworkEventParser networkParser;
+    @Autowired private CustomEventParser customParser;
     @Autowired private LlmProcess llmProcess;
 
     /**
@@ -54,7 +56,7 @@ public class ParserDispatcher {
                 case "PROCESS"        -> processParser.parse(rawData);
                 case "NETWORK"        -> networkParser.parse(rawData);
                 case "ALERT", "THREAT", "SECURITY_FINDING" -> alertParser.parse(rawData);
-                default -> throw unknown(rawData);
+                default -> tryCustomParserOrFallback(rawData);
             };
         }
 
@@ -94,7 +96,32 @@ public class ParserDispatcher {
         if (hasAny(root, "username", "workstation", "accountName", "user")) {
             return windowsParser.parse(rawData);
         }
-        // Unknown format — let ParserWorker catch and route to DLQ
+
+        return tryCustomParserOrFallback(rawData);
+    }
+
+    private BaseEvent tryCustomParserOrFallback(String rawData) {
+        try {
+            BaseEvent customEvent = customParser.parse(rawData);
+            if (customEvent != null) {
+                log.info("[ParserDispatcher] Custom parser handled unknown payload");
+                return customEvent;
+            }
+        } catch (Exception e) {
+            log.warn("[ParserDispatcher] Custom parser failed, falling back to LLM: {}", e.getMessage());
+        }
+
+        if (llmProcess != null) {
+            AlertEvent llmFallback = new AlertEvent();
+            llmFallback.setAlertName("Pending LLM Analysis");
+            llmFallback.setSeverity("LOW");
+            llmFallback.setDescription(rawData.length() > 500 ? rawData.substring(0, 500) : rawData);
+            llmFallback.setSource("llm-fallback");
+            llmFallback.setCategory(com.viettelDigitalTalent.EntitiyManagement.normalize.base.EventCategory.THREAT.name());
+            log.info("[ParserDispatcher] Falling back to LLM placeholder for unknown payload");
+            return llmFallback;
+        }
+
         throw unknown(rawData);
     }
 

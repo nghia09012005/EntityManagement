@@ -51,6 +51,8 @@ public class BaseEvent {
     @JsonProperty("enrichment_id") private String enrichmentId;
     @JsonProperty("is_enriched")   private boolean enriched;
     @JsonProperty("raw_data")      private Map<String, Object> rawData = new HashMap<>();
+    /** Trường lạ trong raw JSON không thuộc schema event — dùng cho mapping tùy chỉnh */
+    @JsonProperty("unknown_fields") private Map<String, Object> unknownFields = new HashMap<>();
 
     // ── Convenience bridge (not serialized) ───────────────────────────────────
 

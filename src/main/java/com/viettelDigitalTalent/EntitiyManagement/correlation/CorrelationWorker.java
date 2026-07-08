@@ -8,12 +8,16 @@ import com.viettelDigitalTalent.EntitiyManagement.storage.repository.AuditLogRep
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -35,13 +39,34 @@ public class CorrelationWorker {
         if (now - lastEvaluatedAt.get() < DEBOUNCE_MS) return;
         lastEvaluatedAt.set(now);
 
-        String tenantId = extractTenantId(payload);
+        log.info("Correlation");
 
-        // windowStart snapped to current hour for dedup (window size = 30p)
+        String tenantId = extractTenantId(payload);
+        evaluateTenantWindow(tenantId);
+    }
+
+    @Scheduled(fixedDelayString = "${soc.correlation.interval-ms:15000}")
+    public void sweepRecentWindows() {
         LocalDateTime windowStart = LocalDateTime.now().truncatedTo(ChronoUnit.HOURS);
         LocalDateTime since = windowStart.minusMinutes(WINDOW_MINUTES);
 
         List<AuditLog> events = auditLogRepository.findRecentEvents(since);
+        if (events.isEmpty()) return;
+
+        Map<String, List<AuditLog>> byTenant = events.stream()
+                .collect(Collectors.groupingBy(event -> normalizeTenantId(event.getTenantId()), LinkedHashMap::new, Collectors.toList()));
+
+        for (Map.Entry<String, List<AuditLog>> entry : byTenant.entrySet()) {
+            log.info("[CorrelationWorker] Sweep evaluating {} events in window {} for tenant {}", entry.getValue().size(), windowStart, entry.getKey());
+            correlationService.evaluate(entry.getValue(), windowStart, entry.getKey());
+        }
+    }
+
+    private void evaluateTenantWindow(String tenantId) {
+        LocalDateTime windowStart = LocalDateTime.now().truncatedTo(ChronoUnit.HOURS);
+        LocalDateTime since = windowStart.minusMinutes(WINDOW_MINUTES);
+
+        List<AuditLog> events = auditLogRepository.findRecentEvents(since, tenantId);
         log.info("[CorrelationWorker] Evaluating {} events in window {} for tenant {}", events.size(), windowStart, tenantId);
         correlationService.evaluate(events, windowStart, tenantId);
     }
@@ -57,5 +82,9 @@ public class CorrelationWorker {
             log.warn("[CorrelationWorker] Không parse được tenantId từ payload: {}", e.getMessage());
         }
         return DEFAULT_TENANT;
+    }
+
+    private String normalizeTenantId(String tenantId) {
+        return tenantId == null || tenantId.isBlank() ? DEFAULT_TENANT : tenantId;
     }
 }

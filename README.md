@@ -206,6 +206,37 @@ Bên cạnh đó, nền tảng cung cấp khả năng trực quan hóa quan hệ
 | `Email`         | `address`      | —                                                       |
 | `Cve`           | `cveId`        | —                                                       |
 
+## Custom Field Mapping
+
+Hệ thống hỗ trợ mapping các trường lạ (`sourceField`) thành entity và relationship trong Neo4j.
+
+- `sourceField`: tên trường lạ trong `unknown_fields` của normalized event.
+- `entityType`: loại entity được tạo từ trường lạ.
+- `relationshipType`: tên quan hệ nếu cần nối entity với một đối tượng khác.
+- `relatedEntityType`: loại entity đích của quan hệ.
+- `relatedEventField`: tên field để lấy giá trị entity đích.
+
+### Auto-infer related event field
+
+Khi `relationshipType` được khai báo và `relatedEntityType` được chọn, backend có thể tự suy field đích nếu `relatedEventField` để trống.
+
+Ví dụ:
+
+- `entityType`: `IP`
+- `relationshipType`: `CONNECTED_TO`
+- `relatedEntityType`: `IP`
+- `relatedEventField`: (bỏ trống)
+
+Trong trường hợp này backend sẽ cố gắng tìm giá trị IP phù hợp từ event, thử các alias như `ip`, `ipAddress`, `srcIp`, `dstIp`, `sourceIp`, `targetIp`, `address`.
+
+Tính năng này giúp UI chỉ cần chọn loại entity đích, không nhất thiết phải biết chính xác tên field raw trong event.
+
+### Lưu ý
+
+- Nếu `relatedEventField` được cung cấp thì backend sẽ ưu tiên dùng field đó.
+- Nếu `relatedEventField` để trống thì backend sẽ infer theo `relatedEntityType`.
+- Cả `FieldMapping` và `CustomEventType` đều hỗ trợ cơ chế này.
+
 > **Enrichment data** (country, ASN, abuseScore, threatLevel, verdict, family…) được lưu riêng trong MongoDB collection `audit_logs` (field `enrichment`). UI query qua `GET /api/enrichment/entity?type=ip&value=...` thay vì đọc từ Neo4j node properties.
 
 ---

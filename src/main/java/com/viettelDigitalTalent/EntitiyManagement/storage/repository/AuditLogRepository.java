@@ -12,6 +12,7 @@ public interface AuditLogRepository {
     void saveRawLog(String eventId, String tenantId, String source, String category, LocalDateTime timestamp, Map<String, Object> rawData, String rawEvent);
     void updateEnrichment(String eventId, Map<String, Object> enrichment);
     Map<String, Object> findEnrichmentByEventId(String eventId);
+    AuditLog findByEventId(String eventId);
     List<AuditLog> findRecentEvents(LocalDateTime since);
     List<AuditLog> findRecentEvents(LocalDateTime since, String tenantId);
     Page<AuditLog> findAlerts(Pageable pageable, String tenantId);

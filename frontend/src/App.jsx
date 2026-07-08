@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Link, useLocation, Navigate, useNavigate 
 import EntityListPage from './pages/EntityListPage'
 import EntityDetailPage from './pages/EntityDetailPage'
 import PathFinderPage from './pages/PathFinderPage'
+import UnknownFieldsPage from './pages/UnknownFieldsPage'
+import SettingsPage from './pages/SettingsPage'
 import DlqPage from './pages/DlqPage'
 import IncidentsPage from './pages/IncidentsPage'
 import LoginPage from './pages/LoginPage'
@@ -29,7 +31,7 @@ function AppContent() {
     if (storedUser && token) {
       try {
         setUser(JSON.parse(storedUser))
-      } catch (e) {
+      } catch {
         localStorage.removeItem('soc_current_user')
         localStorage.removeItem('soc_token')
       }
@@ -65,6 +67,8 @@ function AppContent() {
             <div style={{ display: 'flex', gap: 4 }}>
               <Link to="/"          className={`nav-link ${isHome ? 'active' : ''}`}>Entities</Link>
               <Link to="/paths"     className={`nav-link ${location.pathname === '/paths'     ? 'active' : ''}`}>Path Finder</Link>
+              <Link to="/unknown-fields" className={`nav-link ${location.pathname === '/unknown-fields' ? 'active' : ''}`}>Unknown Fields</Link>
+              <Link to="/settings/field-mappings" className={`nav-link ${location.pathname.startsWith('/settings') ? 'active' : ''}`}>Settings</Link>
               <Link to="/incidents" className={`nav-link ${location.pathname === '/incidents' ? 'active' : ''}`}>Incidents</Link>
               <Link to="/dlq"       className={`nav-link ${location.pathname === '/dlq'       ? 'active' : ''}`}>Dead Letters</Link>
             </div>
@@ -109,6 +113,22 @@ function AppContent() {
             element={
               <ProtectedRoute user={user}>
                 <PathFinderPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/unknown-fields"
+            element={
+              <ProtectedRoute user={user}>
+                <UnknownFieldsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings/field-mappings"
+            element={
+              <ProtectedRoute user={user}>
+                <SettingsPage />
               </ProtectedRoute>
             }
           />

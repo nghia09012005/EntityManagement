@@ -6,6 +6,7 @@ import com.viettelDigitalTalent.EntitiyManagement.llm.core.GroqLlmClient;
 import com.viettelDigitalTalent.EntitiyManagement.llm.core.LlmOutputValidator;
 import com.viettelDigitalTalent.EntitiyManagement.llm.core.LlmProcess;
 import com.viettelDigitalTalent.EntitiyManagement.llm.core.LlmPromptEngine;
+import com.viettelDigitalTalent.EntitiyManagement.llm.core.LogSanitizer;
 import com.viettelDigitalTalent.EntitiyManagement.llm.core.MockLlmClient;
 import com.viettelDigitalTalent.EntitiyManagement.normalize.alert.AlertEvent;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
@@ -42,6 +44,7 @@ class LlmProcessTest {
         ReflectionTestUtils.setField(llmProcess, "mockClient",      mockClient);
         ReflectionTestUtils.setField(llmProcess, "promptEngine",    promptEngine);
         ReflectionTestUtils.setField(llmProcess, "outputValidator", realValidator);
+        ReflectionTestUtils.setField(llmProcess, "logSanitizer",    new LogSanitizer());
 
         lenient().when(promptEngine.build(anyString())).thenReturn("prompt");
         lenient().when(geminiClient.modelName()).thenReturn("gemini");
@@ -86,24 +89,22 @@ class LlmProcessTest {
     }
 
     @Test
-    void fallsBackToMockWhenBothGeminiAndGroqFail() {
+    void throwsWhenBothGeminiAndGroqFail() {
         when(geminiClient.call(anyString())).thenReturn(null);
         when(groqClient.call(anyString())).thenReturn(null);
-        when(mockClient.call(anyString()))
-                .thenReturn("{\"alertName\":\"Mock Alert\",\"severity\":\"LOW\"}");
 
-        AlertEvent result = llmProcess.extractAlert("text");
-
-        assertThat(result.getAlertName()).isEqualTo("Mock Alert");
+        assertThatThrownBy(() -> llmProcess.extractAlert("text"))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(mockClient, never()).call(anyString());
     }
 
     @Test
-    void returnsNullWhenAllClientsFail() {
+    void throwsWhenAllClientsFail() {
         when(geminiClient.call(anyString())).thenReturn(null);
         when(groqClient.call(anyString())).thenReturn(null);
-        when(mockClient.call(anyString())).thenReturn(null);
 
-        assertThat(llmProcess.extractAlert("text")).isNull();
+        assertThatThrownBy(() -> llmProcess.extractAlert("text"))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -118,28 +119,24 @@ class LlmProcessTest {
     }
 
     @Test
-    void handlesGroqExceptionAndFallsBackToMock() {
+    void handlesGroqExceptionAndThrowsWhenNoClientSucceeds() {
         when(geminiClient.call(anyString())).thenReturn(null);
         when(groqClient.call(anyString())).thenThrow(new RuntimeException("groq down"));
-        when(mockClient.call(anyString()))
-                .thenReturn("{\"alertName\":\"Mock\",\"severity\":\"LOW\"}");
 
-        AlertEvent result = llmProcess.extractAlert("text");
-
-        assertThat(result.getAlertName()).isEqualTo("Mock");
+        assertThatThrownBy(() -> llmProcess.extractAlert("text"))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(mockClient, never()).call(anyString());
     }
 
     @Test
-    void skipsNullClientsGracefully() {
+    void throwsWhenOptionalClientsAreMissing() {
         // Simulate no Gemini/Groq configured (optional beans absent)
         ReflectionTestUtils.setField(llmProcess, "geminiClient", null);
         ReflectionTestUtils.setField(llmProcess, "groqClient",   null);
-        when(mockClient.call(anyString()))
-                .thenReturn("{\"alertName\":\"Fallback\",\"severity\":\"LOW\"}");
 
-        AlertEvent result = llmProcess.extractAlert("plain text");
-
-        assertThat(result.getAlertName()).isEqualTo("Fallback");
+        assertThatThrownBy(() -> llmProcess.extractAlert("plain text"))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(mockClient, never()).call(anyString());
     }
 
     @Test
